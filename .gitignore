@@ -3,6 +3,7 @@ GenAI/venv/
 GenAI/__pycache__/
 GenAI/*.pyc
 GenAI/.env
+GenAI/docker-compose.yml/
 
 # Frontend (React)
 mind-bloom-news-main/node_modules/

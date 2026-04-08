@@ -1,0 +1,21 @@
+# Backend (GenAI)
+GenAI/venv/
+GenAI/__pycache__/
+GenAI/*.pyc
+GenAI/.env
+
+# Frontend (React)
+mind-bloom-news-main/node_modules/
+mind-bloom-news-main/dist/
+mind-bloom-news-main/.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# logs
+*.log

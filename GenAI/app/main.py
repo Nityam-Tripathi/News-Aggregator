@@ -25,7 +25,7 @@ Base.metadata.create_all(bind=engine)
 
 @app.on_event("startup")
 def start():
-    start_scheduler()
+    pass
     
     
 @app.get("/")

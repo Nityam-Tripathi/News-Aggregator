@@ -23,10 +23,13 @@ app.add_middleware(
 Base.metadata.create_all(bind=engine)
 
 
-@app.on_event("startup")
-def start():
-    start_scheduler()
+# @app.on_event("startup")
+# def start():
+#     start_scheduler()
     
+@app.get("/test")
+def test():
+    return {"status": "ok"}
     
 @app.get("/")
 def root():

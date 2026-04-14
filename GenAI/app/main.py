@@ -1,9 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
 from .database import engine
 from .models import Base
-
+from .news_fetcher import fetch_news
 from sqlalchemy import text
 
 app = FastAPI()
@@ -34,3 +33,8 @@ def root():
 @app.get("/test")
 def test():
     return {"status": "ok"}
+
+@app.get("/news-test")
+def news_test():
+    articles = fetch_news()
+    return {"count": len(articles)}

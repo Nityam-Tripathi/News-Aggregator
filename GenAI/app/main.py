@@ -66,7 +66,7 @@ def ask(query: str):
             continue
 
         combined = f"{title}. {content}"
-        embedding = generate_embedding(combined)
+        embedding = [0.0] * 384   # dummy embedding
 
         published = article.get("publishedAt")
 
@@ -91,7 +91,7 @@ def ask(query: str):
     db.commit()
 
     # 🔹 Search
-    query_embedding = generate_embedding(query)
+    query_embedding = [0.0] * 384
 
     results = db.query(NewsArticle).order_by(
         NewsArticle.embedding.cosine_distance(query_embedding),
@@ -105,7 +105,7 @@ def ask(query: str):
 
     db.close()
 
-    answer = generate_answer(query, context)
+    answer = context[:500] if context else "No data"
 
     return {
         "answer": answer,

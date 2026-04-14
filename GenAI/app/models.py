@@ -9,6 +9,6 @@ class NewsArticle(Base):
     title = Column(String)
     content = Column(Text)
     published_at = Column(DateTime)
-    embedding = Column(Vector(384))
+    embedding = Column(Text)   # TEMP FIX
     url = Column(String)
     image_url = Column(String)

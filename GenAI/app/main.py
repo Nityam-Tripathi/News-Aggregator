@@ -1,17 +1,20 @@
 from fastapi import FastAPI
-from .database import engine, SessionLocal
-from .models import Base, NewsArticle
-from .news_fetcher import fetch_news
-from .embeddings import generate_embedding
-from .rag_pipeline import generate_answer
-from .scheduler import start_scheduler
-from .news_fetcher import fetch_news
-from datetime import datetime,timedelta
-from collections import Counter
-import re
 from fastapi.middleware.cors import CORSMiddleware
 
+from .database import engine, SessionLocal
+from .models import Base, NewsArticle
+from .news_fetcher import fetch_news, fetch_news_query
+from .embeddings import generate_embedding
+from .rag_pipeline import generate_answer
+
+from sqlalchemy import desc, text
+from datetime import datetime, timedelta
+from collections import Counter
+import re
+
 app = FastAPI()
+
+# ✅ CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -20,94 +23,32 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ✅ Ensure vector extension
+with engine.connect() as conn:
+    try:
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        conn.commit()
+    except Exception as e:
+        print("Vector extension issue:", e)
+
+# ✅ Create tables
 Base.metadata.create_all(bind=engine)
 
 
-# @app.on_event("startup")
-# def start():
-#     start_scheduler()
-    
+@app.get("/")
+def root():
+    return {"message": "AI News Backend 🚀"}
+
+
 @app.get("/test")
 def test():
     return {"status": "ok"}
-    
-@app.get("/")
-def root():
-    return {"message": "AI News Aggregator running"}
 
-
-@app.post("/ingest")
-def ingest():
-    db = SessionLocal()
-    articles = fetch_news()
-
-    for article in articles:
-        title = article.get("title")
-        content = article.get("description") or ""
-        published = article.get("publishedAt")
-
-        try:
-            if published:
-                published_time = datetime.fromisoformat(
-                    published.replace("Z", "+00:00")
-                )
-            else:
-                published_time = None
-        except Exception as e:
-            print("Error parsing date:", e)
-            published_time = None
-
-        if title and content:
-            combined_text = f"{title}. {content}"
-            embedding = generate_embedding(combined_text)
-            
-            news = NewsArticle(
-                title=title,
-                content=content,
-                url=article.get("url"),
-                image_url=article.get("urlToImage"),
-                published_at=published_time,
-                embedding=embedding
-            )
-
-            db.add(news)
-
-    db.commit()
-    db.close()
-
-    return {"message": "News inserted with embeddings"}
-
-
-@app.get("/search")
-def search(query: str):
-    db = SessionLocal()
-
-    # Convert query → embedding
-    expanded_query = f"{query} artificial intelligence AI technology news latest updates"
-    query_embedding = generate_embedding(expanded_query)
-
-    # Vector similarity search
-    results = db.query(NewsArticle).order_by(
-        NewsArticle.embedding.cosine_distance(query_embedding)
-    ).limit(10).all()
-
-    db.close()
-
-    return [
-        {
-            "title": article.title,
-            "content": article.content
-        }
-        for article in results
-    ]
-    
 @app.get("/ask")
 def ask(query: str):
     db = SessionLocal()
 
-    # 🔥 STEP 1: Fetch fresh news for this query
-    from .news_fetcher import fetch_news_query
-
+    # 🔹 Dynamic fetch
     fresh_articles = fetch_news_query(query)
 
     for article in fresh_articles:
@@ -117,7 +58,6 @@ def ask(query: str):
         if not title or not content:
             continue
 
-        # Avoid duplicates
         exists = db.query(NewsArticle).filter(
             NewsArticle.title == title
         ).first()
@@ -133,70 +73,50 @@ def ask(query: str):
         try:
             published_time = datetime.fromisoformat(
                 published.replace("Z", "+00:00")
-        ) if published else None
+            ) if published else None
         except:
             published_time = None
 
         news = NewsArticle(
-        title=title,
-        content=content,
-        url=article.get("url"),
-        image_url=article.get("urlToImage"),
-        published_at=published_time,   # ✅ ADD THIS
-        embedding=embedding
+            title=title,
+            content=content,
+            url=article.get("url"),
+            image_url=article.get("urlToImage"),
+            published_at=published_time,
+            embedding=embedding
         )
 
         db.add(news)
 
     db.commit()
 
-    # 🔥 STEP 2: Now perform semantic search
-    expanded_query = f"{query} news latest updates"
-    query_embedding = generate_embedding(expanded_query)
+    # 🔹 Search
+    query_embedding = generate_embedding(query)
 
-    raw_results = db.query(NewsArticle).order_by(
+    results = db.query(NewsArticle).order_by(
         NewsArticle.embedding.cosine_distance(query_embedding),
-        NewsArticle.published_at.desc()
-    ).limit(15).all()
+        desc(NewsArticle.published_at)
+    ).limit(5).all()
 
-    # Remove duplicates
-    seen = set()
-    results = []
-
-    for article in raw_results:
-        if article.title not in seen:
-            seen.add(article.title)
-            results.append(article)
-
-        if len(results) == 5:
-            break
-
-    # 🔥 STEP 3: Build context
     context = "\n\n".join([
-        f"""
-Article {i+1}:
-Title: {article.title}
-Content: {article.content}
-"""
-        for i, article in enumerate(results)
+        f"Title: {a.title}\nContent: {a.content}"
+        for a in results
     ])
 
     db.close()
 
-    # 🔥 STEP 4: Generate answer
     answer = generate_answer(query, context)
 
     return {
-        "query": query,
         "answer": answer,
         "sources": [
             {
-                "title": article.title,
-                "url": article.url,
-                "image": article.image_url,
-                "published_at": str(article.published_at)
+                "title": a.title,
+                "url": a.url,
+                "image": a.image_url,
+                "published_at": str(a.published_at)
             }
-            for article in results
+            for a in results
         ]
     }
     
@@ -205,45 +125,26 @@ def top_news():
     db = SessionLocal()
 
     articles = db.query(NewsArticle).order_by(
-        NewsArticle.id.desc()
+        desc(NewsArticle.published_at)
     ).limit(10).all()
 
     db.close()
 
     return [
         {
-            "title": article.title,
-            "url": article.url,
-            "image": article.image_url, 
-            "content": article.content,
-            "published_at": str(article.published_at)
-        }
-        for article in articles
-    ]
-    
-@app.get("/analytics")
-def analytics():
-    db = SessionLocal()
-
-    articles = db.query(NewsArticle).all()
-
-    data = [
-        {
             "title": a.title,
-            "content": a.content
+            "url": a.url,
+            "image": a.image_url,
+            "content": a.content,
+            "published_at": str(a.published_at)
         }
         for a in articles
     ]
-
-    db.close()
-
-    return data
-
+    
 @app.get("/trending")
 def trending():
     db = SessionLocal()
 
-    # 🔥 Last 24 hours
     time_limit = datetime.utcnow() - timedelta(hours=24)
 
     articles = db.query(NewsArticle).filter(
@@ -253,40 +154,16 @@ def trending():
 
     db.close()
 
-    # 🔥 Extract words
     words = []
 
-    for article in articles:
-        title = article.title.lower()
-
-        # Remove symbols
-        clean = re.sub(r'[^a-zA-Z0-9 ]', '', title)
-
+    for a in articles:
+        clean = re.sub(r'[^a-zA-Z0-9 ]', '', a.title.lower())
         words.extend(clean.split())
 
-    # 🔥 Remove useless words
-    stopwords = {
-        "the", "is", "in", "on", "at", "a", "an", "and",
-        "to", "of", "for", "with", "by", "from", "as"
-    }
+    stopwords = {"the","is","in","on","at","and","to","of","for","with"}
+    words = [w for w in words if w not in stopwords and len(w) > 3]
 
-    filtered = [w for w in words if w not in stopwords and len(w) > 3]
+    counts = Counter(words).most_common(10)
 
-    # 🔥 Count frequency
-    counts = Counter(filtered).most_common(10)
+    return [{"topic": w, "count": c} for w, c in counts]
 
-    return [
-        {"topic": word, "count": count}
-        for word, count in counts
-    ]
-    
-    
-import os
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(
-        "app.main:app",
-        host="0.0.0.0",
-        port=int(os.environ.get("PORT", 10000))
-    )

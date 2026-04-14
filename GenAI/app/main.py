@@ -25,7 +25,7 @@ Base.metadata.create_all(bind=engine)
 
 @app.on_event("startup")
 def start():
-    pass
+    start_scheduler()
     
     
 @app.get("/")
@@ -276,3 +276,14 @@ def trending():
         {"topic": word, "count": count}
         for word, count in counts
     ]
+    
+    
+import os
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 10000))
+    )

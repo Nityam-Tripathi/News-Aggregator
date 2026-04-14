@@ -5,6 +5,15 @@ from .models import Base
 app = FastAPI()
 
 # Create tables
+from sqlalchemy import text
+
+with engine.connect() as conn:
+    try:
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        conn.commit()
+    except Exception as e:
+        print("Vector extension issue:", e)
+
 Base.metadata.create_all(bind=engine)
 
 @app.get("/")

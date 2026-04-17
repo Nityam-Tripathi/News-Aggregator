@@ -2,14 +2,11 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from .news_fetcher import fetch_news
 from .database import SessionLocal
 from .models import NewsArticle
-from datetime import datetime
 from .embeddings import generate_embedding
 
-def ingest_news():
-
-    print("🔄 Running scheduled ingestion...")
-
+def job():
     db = SessionLocal()
+
     articles = fetch_news()
 
     for article in articles:
@@ -19,7 +16,6 @@ def ingest_news():
         if not title or not content:
             continue
 
-        # Avoid duplicates
         exists = db.query(NewsArticle).filter(
             NewsArticle.title == title
         ).first()
@@ -27,15 +23,13 @@ def ingest_news():
         if exists:
             continue
 
-        combined_text = f"{title}. {content}"
-        embedding = generate_embedding(combined_text)
+        embedding = [0.0] * 384  # safe
 
         news = NewsArticle(
             title=title,
             content=content,
             url=article.get("url"),
-            image_url=article.get("urlToImage"),
-            embedding=embedding
+            image_url=article.get("urlToImage")
         )
 
         db.add(news)
@@ -43,17 +37,8 @@ def ingest_news():
     db.commit()
     db.close()
 
-    print("✅ News ingestion complete")
-
 
 def start_scheduler():
     scheduler = BackgroundScheduler()
-    
-    ingest_news()
-
-    # Run every 30 minutes
-    scheduler.add_job(ingest_news, "interval", minutes=30)
-
+    scheduler.add_job(job, "interval", minutes=30)  # every 30 min
     scheduler.start()
-
-    print("🚀 Scheduler started")

@@ -4,7 +4,7 @@ from .models import Base, NewsArticle
 from .news_fetcher import fetch_news, fetch_news_query
 from .embeddings import generate_embedding
 from .rag_pipeline import generate_answer
-# from .scheduler import start_scheduler  # ❌ keep disabled for deploy
+from .scheduler import start_scheduler 
 
 from datetime import datetime, timedelta
 from collections import Counter
@@ -25,6 +25,9 @@ app.add_middleware(
 
 Base.metadata.create_all(bind=engine)
 
+@app.on_event("startup")
+def start():
+    start_scheduler()
 
 @app.get("/")
 def root():
@@ -176,6 +179,7 @@ def ask(query: str):
 
 @app.get("/top-news")
 def top_news():
+    fresh = fetch_news()
     db = SessionLocal()
     try:
         articles = db.query(NewsArticle).order_by(

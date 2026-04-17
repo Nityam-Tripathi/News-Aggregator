@@ -6,7 +6,8 @@ import SourceCard from "@/components/SourceCard";
 import NewsCard from "@/components/NewsCard";
 import ErrorMessage from "@/components/ErrorMessage";
 import { AnswerSkeleton, SourceSkeleton } from "@/components/SkeletonLoaders";
-const API = import.meta.env.VITE_API_URL;
+
+const API = import.meta.env.VITE_API_URL; // ✅ FIXED
 
 type NewsArticle = {
   id: string;
@@ -14,7 +15,7 @@ type NewsArticle = {
   url: string;
   description?: string;
   image?: string;
-  published_at?: string; // ✅ NEW
+  published_at?: string;
   bookmarked?: boolean;
 };
 
@@ -34,12 +35,24 @@ const Index = () => {
     return new Date(date).toLocaleString();
   };
 
-  // 🔥 Fetch Trending News
+  // 🔥 Fetch Top News
   useEffect(() => {
     const fetchNews = async () => {
       try {
         const res = await fetch(`${API}/top-news`);
+
+        if (!res.ok) {
+          console.error("Top news API error:", res.status);
+          return;
+        }
+
         const data = await res.json();
+
+        if (!Array.isArray(data)) {
+          console.error("Invalid top-news response:", data);
+          setArticles([]);
+          return;
+        }
 
         const formatted = data.map((item: any, index: number) => ({
           id: index.toString(),
@@ -47,11 +60,12 @@ const Index = () => {
           url: item.url,
           description: item.content || "Click to read full article",
           image: item.image || "",
-          published_at: item.published_at, // ✅ NEW
+          published_at: item.published_at,
           bookmarked: false,
         }));
 
         setArticles(formatted);
+
       } catch (error) {
         console.error("Failed to fetch news", error);
       }
@@ -65,8 +79,22 @@ const Index = () => {
     const fetchAnalytics = async () => {
       try {
         const res = await fetch(`${API}/analytics`);
+
+        if (!res.ok) {
+          console.error("Analytics API error:", res.status);
+          return;
+        }
+
         const data = await res.json();
+
+        if (!Array.isArray(data)) {
+          console.error("Invalid analytics response:", data);
+          setAnalyticsData([]);
+          return;
+        }
+
         setAnalyticsData(data);
+
       } catch (error) {
         console.error("Analytics fetch error:", error);
       }
@@ -90,13 +118,21 @@ const Index = () => {
       .slice(0, 6);
   };
 
-  // 🔥 Search
+  // 🔍 Search
   const handleSearch = useCallback(async (query: string) => {
     setCurrentQuery(query);
     setSearchState("loading");
 
     try {
-      const res = await fetch(`${API}/ask?query=${encodeURIComponent(query)}`);
+      const res = await fetch(
+        `${API}/ask?query=${encodeURIComponent(query)}`
+      );
+
+      if (!res.ok) {
+        console.error("Ask API error:", res.status);
+        setSearchState("error");
+        return;
+      }
 
       const data = await res.json();
 
@@ -112,11 +148,13 @@ const Index = () => {
         if (i >= fullAnswer.length) clearInterval(interval);
       }, 15);
 
-      const formattedSources = (data.sources || []).map((s: any) => ({
-        ...s,
-        image_url: s.image,
-        published_at: s.published_at, // ✅ NEW
-      }));
+      const formattedSources = Array.isArray(data.sources)
+        ? data.sources.map((s: any) => ({
+            ...s,
+            image_url: s.image,
+            published_at: s.published_at,
+          }))
+        : [];
 
       setSources(formattedSources);
       setSearchState("done");
@@ -137,7 +175,6 @@ const Index = () => {
 
   return (
     <div className="min-h-screen">
-      {/* Hero */}
       <section className={`transition-all duration-500 ${searchState === "idle" ? "pt-24 pb-16" : "pt-8 pb-6"}`}>
         <div className="max-w-3xl mx-auto px-4 text-center">
           <h1 className="text-4xl md:text-5xl font-bold mb-3">
@@ -154,7 +191,6 @@ const Index = () => {
 
       <div className="max-w-6xl mx-auto px-4 pb-16 space-y-10">
 
-        {/* Loading */}
         {searchState === "loading" && (
           <div className="space-y-6">
             <AnswerSkeleton />
@@ -164,7 +200,6 @@ const Index = () => {
           </div>
         )}
 
-        {/* Answer */}
         {searchState === "done" && (
           <div className="space-y-6">
             <AnswerSection answer={displayedAnswer} query={currentQuery} />
@@ -176,11 +211,10 @@ const Index = () => {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {sources.map((s, i) => (
+                {(sources || []).map((s, i) => (
                   <div key={i} className="bg-white p-3 rounded shadow">
                     <SourceCard source={s} index={i} />
 
-                    {/* 🕒 Source time */}
                     <div className="flex items-center gap-1 text-xs text-gray-500 mt-1">
                       <Clock size={12} />
                       {formatDate(s.published_at)}
@@ -194,7 +228,6 @@ const Index = () => {
 
         {searchState === "error" && <ErrorMessage />}
 
-        {/* Trending */}
         <section>
           <div className="flex items-center gap-2 mb-6">
             <TrendingUp size={20} />
@@ -202,7 +235,7 @@ const Index = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {articles.map((article, i) => (
+            {(articles || []).map((article, i) => (
               <div key={article.id} className="relative">
                 <NewsCard
                   article={article}
@@ -210,7 +243,6 @@ const Index = () => {
                   onBookmark={handleBookmark}
                 />
 
-                {/* 🕒 Trending time */}
                 <div className="absolute bottom-2 left-2 flex items-center gap-1 text-xs bg-white/80 px-2 py-1 rounded">
                   <Clock size={12} />
                   {formatDate(article.published_at)}
@@ -220,7 +252,6 @@ const Index = () => {
           </div>
         </section>
 
-        {/* Analytics */}
         <section>
           <h2 className="text-xl font-bold mb-4">📊 News Analytics</h2>
 

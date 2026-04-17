@@ -1,233 +1,254 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { TrendingUp, BookOpen, Clock } from "lucide-react";
+import SearchBar from "@/components/SearchBar";
+import AnswerSection from "@/components/AnswerSection";
+import SourceCard from "@/components/SourceCard";
+import NewsCard from "@/components/NewsCard";
+import ErrorMessage from "@/components/ErrorMessage";
+import { AnswerSkeleton, SourceSkeleton } from "@/components/SkeletonLoaders";
+const API = import.meta.env.VITE_API_URL;
 
-const API = import.meta.env.VITE_API_URL; // NO trailing slash in .env
-
-type Article = {
+type NewsArticle = {
+  id: string;
   title: string;
   url: string;
+  description?: string;
   image?: string;
-  content?: string;
+  published_at?: string; // ✅ NEW
+  bookmarked?: boolean;
 };
 
-export default function Index() {
-  const [articles, setArticles] = useState<Article[]>([]);
-  const [trending, setTrending] = useState<any[]>([]);
-  const [query, setQuery] = useState("");
+const Index = () => {
+  const [articles, setArticles] = useState<NewsArticle[]>([]);
+  const [analyticsData, setAnalyticsData] = useState<any[]>([]);
+  const [searchState, setSearchState] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [currentQuery, setCurrentQuery] = useState("");
+
   const [answer, setAnswer] = useState("");
+  const [displayedAnswer, setDisplayedAnswer] = useState("");
   const [sources, setSources] = useState<any[]>([]);
 
-  // 🔥 Fetch Top News
+  // 🕒 Format Date
+  const formatDate = (date?: string) => {
+    if (!date) return "";
+    return new Date(date).toLocaleString();
+  };
+
+  // 🔥 Fetch Trending News
   useEffect(() => {
     const fetchNews = async () => {
       try {
         const res = await fetch(`${API}/top-news`);
-
-        if (!res.ok) {
-          console.error("Top news API error:", res.status);
-          return;
-        }
-
         const data = await res.json();
 
-        if (!Array.isArray(data)) {
-          console.error("Invalid top-news response:", data);
-          setArticles([]);
-          return;
-        }
+        const formatted = data.map((item: any, index: number) => ({
+          id: index.toString(),
+          title: item.title,
+          url: item.url,
+          description: item.content || "Click to read full article",
+          image: item.image || "",
+          published_at: item.published_at, // ✅ NEW
+          bookmarked: false,
+        }));
 
-        setArticles(data);
-      } catch (err) {
-        console.error("Fetch news error:", err);
+        setArticles(formatted);
+      } catch (error) {
+        console.error("Failed to fetch news", error);
       }
     };
 
     fetchNews();
   }, []);
 
-  // 🔥 Fetch Trending
+  // 🔥 Fetch Analytics
   useEffect(() => {
-    const fetchTrending = async () => {
+    const fetchAnalytics = async () => {
       try {
-        const res = await fetch(`${API}/trending`);
-
-        if (!res.ok) {
-          console.error("Trending API error:", res.status);
-          return;
-        }
-
+        const res = await fetch(`${API}/analytics`);
         const data = await res.json();
-
-        if (!Array.isArray(data)) {
-          console.error("Invalid trending response:", data);
-          setTrending([]);
-          return;
-        }
-
-        setTrending(data);
-      } catch (err) {
-        console.error("Trending fetch error:", err);
+        setAnalyticsData(data);
+      } catch (error) {
+        console.error("Analytics fetch error:", error);
       }
     };
 
-    fetchTrending();
+    fetchAnalytics();
   }, []);
 
-  // 🔍 Ask (RAG)
-  const handleSearch = useCallback(async (q: string) => {
-    setQuery(q);
+  // 🧠 Keywords
+  const getTopKeywords = () => {
+    const text = analyticsData.map((a) => a.title + " " + a.content).join(" ");
+    const words = text.toLowerCase().split(/\W+/);
+
+    const freq: any = {};
+    words.forEach((w) => {
+      if (w.length > 4) freq[w] = (freq[w] || 0) + 1;
+    });
+
+    return Object.entries(freq)
+      .sort((a: any, b: any) => b[1] - a[1])
+      .slice(0, 6);
+  };
+
+  // 🔥 Search
+  const handleSearch = useCallback(async (query: string) => {
+    setCurrentQuery(query);
+    setSearchState("loading");
 
     try {
-      const res = await fetch(`${API}/ask?query=${encodeURIComponent(q)}`);
-
-      if (!res.ok) {
-        console.error("Ask API error:", res.status);
-        return;
-      }
+      const res = await fetch(`${API}/ask?query=${encodeURIComponent(query)}`);
 
       const data = await res.json();
 
-      setAnswer(data.answer || "");
+      const fullAnswer = data.answer || "";
 
-      const safeSources = Array.isArray(data.sources) ? data.sources : [];
-      setSources(safeSources);
+      setAnswer(fullAnswer);
+      setDisplayedAnswer("");
 
-    } catch (err) {
-      console.error("Search error:", err);
+      let i = 0;
+      const interval = setInterval(() => {
+        i++;
+        setDisplayedAnswer(fullAnswer.slice(0, i));
+        if (i >= fullAnswer.length) clearInterval(interval);
+      }, 15);
+
+      const formattedSources = (data.sources || []).map((s: any) => ({
+        ...s,
+        image_url: s.image,
+        published_at: s.published_at, // ✅ NEW
+      }));
+
+      setSources(formattedSources);
+      setSearchState("done");
+
+    } catch (error) {
+      console.error("API ERROR:", error);
+      setSearchState("error");
     }
   }, []);
 
+  const handleBookmark = useCallback((id: string) => {
+    setArticles((prev) =>
+      prev.map((a) =>
+        a.id === id ? { ...a, bookmarked: !a.bookmarked } : a
+      )
+    );
+  }, []);
+
   return (
-  <div style={{ display: "flex", height: "100vh", fontFamily: "Arial" }}>
+    <div className="min-h-screen">
+      {/* Hero */}
+      <section className={`transition-all duration-500 ${searchState === "idle" ? "pt-24 pb-16" : "pt-8 pb-6"}`}>
+        <div className="max-w-3xl mx-auto px-4 text-center">
+          <h1 className="text-4xl md:text-5xl font-bold mb-3">
+            News<span className="text-primary">AI</span>
+          </h1>
 
-    {/* Sidebar */}
-    <div style={{
-      width: "220px",
-      background: "#111827",
-      color: "white",
-      padding: "20px"
-    }}>
-      <h2>🧠 NewsAI</h2>
-
-      <p style={{ marginTop: "20px", color: "#9CA3AF" }}>Navigation</p>
-      <p>🏠 Home</p>
-      <p>🔥 Trending</p>
-
-      <p style={{ marginTop: "20px", color: "#9CA3AF" }}>Categories</p>
-      <p>AI</p>
-      <p>Technology</p>
-      <p>Business</p>
-    </div>
-
-    {/* Main Content */}
-    <div style={{ flex: 1, padding: "20px", overflowY: "auto" }}>
-
-      <h1>🧠 AI News App</h1>
-
-      {/* Search */}
-      <input
-        type="text"
-        placeholder="Search news..."
-        style={{
-          width: "100%",
-          padding: "10px",
-          marginBottom: "20px",
-          borderRadius: "8px",
-          border: "1px solid #ccc"
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") handleSearch((e.target as HTMLInputElement).value);
-        }}
-      />
-
-      {/* Trending */}
-      <h2>🔥 Trending</h2>
-      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-        {(trending || []).map((t, i) => (
-          <button
-            key={i}
-            onClick={() => handleSearch(t.topic)}
-            style={{
-              padding: "6px 12px",
-              borderRadius: "20px",
-              border: "none",
-              background: "#3B82F6",
-              color: "white",
-              cursor: "pointer"
-            }}
-          >
-            {t.topic}
-          </button>
-        ))}
-      </div>
-
-      {/* Answer */}
-      {answer && (
-        <div style={{ marginTop: "20px" }}>
-          <h2>🧠 Answer</h2>
-          <p>{answer}</p>
+          <SearchBar
+            onSearch={handleSearch}
+            isLoading={searchState === "loading"}
+            large={searchState === "idle"}
+          />
         </div>
-      )}
+      </section>
 
-      {/* Sources */}
-      {sources.length > 0 && (
-        <div style={{ marginTop: "20px" }}>
-          <h2>📚 Sources</h2>
-          {(sources || []).map((s, i) => (
-            <div key={i} style={{ marginBottom: "10px" }}>
-              <a href={s.url} target="_blank" style={{ color: "#2563EB" }}>
-                {s.title}
-              </a>
+      <div className="max-w-6xl mx-auto px-4 pb-16 space-y-10">
+
+        {/* Loading */}
+        {searchState === "loading" && (
+          <div className="space-y-6">
+            <AnswerSkeleton />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {[0, 1, 2, 3].map((i) => <SourceSkeleton key={i} />)}
             </div>
-          ))}
-        </div>
-      )}
-
-      {/* Top News */}
-      <h2 style={{ marginTop: "30px" }}>📰 Top News</h2>
-
-      <div style={{ display: "grid", gap: "15px" }}>
-        {(articles || []).map((a, i) => (
-          <div key={i} style={{
-            border: "1px solid #ddd",
-            borderRadius: "10px",
-            padding: "15px",
-            display: "flex",
-            gap: "15px"
-          }}>
-
-            {/* Image */}
-            {a.image && (
-              <img
-                src={a.image}
-                alt=""
-                style={{
-                  width: "120px",
-                  height: "80px",
-                  objectFit: "cover",
-                  borderRadius: "8px"
-                }}
-              />
-            )}
-
-            {/* Content */}
-            <div>
-              <a href={a.url} target="_blank" style={{
-                fontWeight: "bold",
-                color: "#111827"
-              }}>
-                {a.title}
-              </a>
-
-              <p style={{ fontSize: "14px", color: "#6B7280" }}>
-                {a.content?.slice(0, 100)}...
-              </p>
-            </div>
-
           </div>
-        ))}
-      </div>
+        )}
 
+        {/* Answer */}
+        {searchState === "done" && (
+          <div className="space-y-6">
+            <AnswerSection answer={displayedAnswer} query={currentQuery} />
+
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <BookOpen size={16} />
+                <h2 className="text-sm font-semibold uppercase">Sources</h2>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {sources.map((s, i) => (
+                  <div key={i} className="bg-white p-3 rounded shadow">
+                    <SourceCard source={s} index={i} />
+
+                    {/* 🕒 Source time */}
+                    <div className="flex items-center gap-1 text-xs text-gray-500 mt-1">
+                      <Clock size={12} />
+                      {formatDate(s.published_at)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {searchState === "error" && <ErrorMessage />}
+
+        {/* Trending */}
+        <section>
+          <div className="flex items-center gap-2 mb-6">
+            <TrendingUp size={20} />
+            <h2 className="text-xl font-bold">Trending News</h2>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {articles.map((article, i) => (
+              <div key={article.id} className="relative">
+                <NewsCard
+                  article={article}
+                  index={i}
+                  onBookmark={handleBookmark}
+                />
+
+                {/* 🕒 Trending time */}
+                <div className="absolute bottom-2 left-2 flex items-center gap-1 text-xs bg-white/80 px-2 py-1 rounded">
+                  <Clock size={12} />
+                  {formatDate(article.published_at)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Analytics */}
+        <section>
+          <h2 className="text-xl font-bold mb-4">📊 News Analytics</h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-white p-4 rounded-xl shadow">
+              <h3 className="text-sm text-muted-foreground">Total Articles</h3>
+              <p className="text-2xl font-bold">{analyticsData.length}</p>
+            </div>
+
+            <div className="bg-white p-4 rounded-xl shadow col-span-2">
+              <h3 className="text-sm text-muted-foreground mb-2">Top Keywords</h3>
+              <div className="flex flex-wrap gap-2">
+                {getTopKeywords().map(([word, count]: any, i: number) => (
+                  <span
+                    key={i}
+                    className="px-3 py-1 bg-primary/10 text-primary rounded-full text-sm"
+                  >
+                    {word} ({count})
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </div>
     </div>
-  </div>
-);
-}
+  );
+};
+
+export default Index;

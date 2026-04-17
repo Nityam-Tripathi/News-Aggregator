@@ -6,6 +6,7 @@ import SourceCard from "@/components/SourceCard";
 import NewsCard from "@/components/NewsCard";
 import ErrorMessage from "@/components/ErrorMessage";
 import { AnswerSkeleton, SourceSkeleton } from "@/components/SkeletonLoaders";
+const API = import.meta.env.VITE_API_URL;
 
 type NewsArticle = {
   id: string;
@@ -37,7 +38,7 @@ const Index = () => {
   useEffect(() => {
     const fetchNews = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/top-news");
+        const res = await fetch(`${API}/top-news`);;
         const data = await res.json();
 
         const formatted = data.map((item: any, index: number) => ({
@@ -63,7 +64,7 @@ const Index = () => {
   useEffect(() => {
     const fetchAnalytics = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/analytics");
+        const res = await fetch(`${API}/analytics`);;
         const data = await res.json();
         setAnalyticsData(data);
       } catch (error) {
@@ -96,8 +97,8 @@ const Index = () => {
 
     try {
       const res = await fetch(
-        `http://127.0.0.1:8000/ask?query=${encodeURIComponent(query)}`
-      );
+        `${API}/ask?query=${encodeURIComponent(query)}`
+      );;
 
       const data = await res.json();
 

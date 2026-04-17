@@ -107,3 +107,46 @@ def ask(query: str):
             for a in results
         ]
     }
+    
+@app.get("/top-news")
+def top_news():
+    db = SessionLocal()
+
+    articles = db.query(NewsArticle).order_by(
+        desc(NewsArticle.id)
+    ).limit(10).all()
+
+    db.close()
+
+    return [
+        {
+            "title": a.title,
+            "url": a.url,
+            "image": a.image_url,
+            "content": a.content
+        }
+        for a in articles
+    ]
+    
+from collections import Counter
+import re
+
+@app.get("/trending")
+def trending():
+    db = SessionLocal()
+
+    articles = db.query(NewsArticle).all()
+    db.close()
+
+    words = []
+
+    for a in articles:
+        clean = re.sub(r'[^a-zA-Z0-9 ]', '', a.title.lower())
+        words.extend(clean.split())
+
+    stopwords = {"the","is","in","on","at","and","to","of","for"}
+    words = [w for w in words if w not in stopwords and len(w) > 3]
+
+    counts = Counter(words).most_common(10)
+
+    return [{"topic": w, "count": c} for w, c in counts]

@@ -4,6 +4,7 @@ from .database import engine
 from .models import Base
 from .news_fetcher import fetch_news
 from sqlalchemy import text
+from .embeddings import generate_embedding
 
 app = FastAPI()
 
@@ -38,3 +39,8 @@ def test():
 def news_test():
     articles = fetch_news()
     return {"count": len(articles)}
+
+@app.get("/embed-test")
+def embed_test():
+    vec = generate_embedding("test text")
+    return {"length": len(vec)}

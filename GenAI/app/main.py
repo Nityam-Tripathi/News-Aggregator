@@ -3,6 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from .database import engine
 from .models import Base
 from .news_fetcher import fetch_news
+from .database import SessionLocal
+from .models import NewsArticle
+from sqlalchemy import desc
 from sqlalchemy import text
 from .embeddings import generate_embedding
 
@@ -44,3 +47,63 @@ def news_test():
 def embed_test():
     vec = generate_embedding("test text")
     return {"length": len(vec)}
+
+@app.get("/ask")
+def ask(query: str):
+    db = SessionLocal()
+
+    # 🔹 Fetch fresh news
+    from .news_fetcher import fetch_news_query
+    articles = fetch_news_query(query)
+
+    for article in articles:
+        title = article.get("title")
+        content = article.get("description") or ""
+
+        if not title or not content:
+            continue
+
+        exists = db.query(NewsArticle).filter(
+            NewsArticle.title == title
+        ).first()
+
+        if exists:
+            continue
+
+        embedding = generate_embedding(title + content)
+
+        news = NewsArticle(
+            title=title,
+            content=content,
+            url=article.get("url"),
+            image_url=article.get("urlToImage"),
+            embedding=embedding
+        )
+
+        db.add(news)
+
+    db.commit()
+
+    # 🔹 Query DB
+    query_embedding = generate_embedding(query)
+
+    results = db.query(NewsArticle).order_by(
+        desc(NewsArticle.id)
+    ).limit(5).all()
+
+    db.close()
+
+    # 🔹 Simple answer (safe version)
+    answer = "\n\n".join([a.title for a in results])
+
+    return {
+        "answer": answer,
+        "sources": [
+            {
+                "title": a.title,
+                "url": a.url,
+                "image": a.image_url
+            }
+            for a in results
+        ]
+    }

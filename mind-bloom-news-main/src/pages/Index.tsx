@@ -76,6 +76,7 @@ const Index = () => {
 
   // 🧠 Keywords
   const getTopKeywords = () => {
+    if (!Array.isArray(analyticsData)) return [];
     const text = analyticsData.map((a) => a.title + " " + a.content).join(" ");
     const words = text.toLowerCase().split(/\W+/);
 

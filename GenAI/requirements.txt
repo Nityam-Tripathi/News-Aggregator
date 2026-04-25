@@ -3,7 +3,6 @@ uvicorn
 sqlalchemy
 psycopg2-binary
 pgvector
-sentence-transformers
 groq
 python-dotenv
 apscheduler

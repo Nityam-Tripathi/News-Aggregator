@@ -13,6 +13,8 @@ import os
 
 from fastapi.middleware.cors import CORSMiddleware
 
+from sqlalchemy import text
+
 app = FastAPI()
 
 app.add_middleware(
@@ -22,6 +24,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+try:
+    with engine.connect() as conn:
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+        conn.commit()
+except Exception as e:
+    print(f"Warning: Could not create vector extension automatically: {e}")
 
 Base.metadata.create_all(bind=engine)
 

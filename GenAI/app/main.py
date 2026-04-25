@@ -152,11 +152,11 @@ def ask(query: str):
 
         db.commit()
 
-        # 🔍 Search
+        # 🔍 Semantic Search using pgvector cosine distance
         query_embedding = generate_embedding(query)
 
         results = db.query(NewsArticle).order_by(
-            NewsArticle.id.desc()
+            NewsArticle.embedding.cosine_distance(query_embedding)
         ).limit(5).all()
 
         context = "\n\n".join([

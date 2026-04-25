@@ -2,7 +2,7 @@
 
 An AI-powered news aggregation and question-answering system built on a full **Retrieval-Augmented Generation (RAG)** pipeline. Ask any question about current events and get grounded, cited answers backed by real-time news articles.
 
-**Live Demo → [InsightStream](https://insightstream-mggeo3yuw-nityams-projects-60c91ee9.vercel.app/)**
+**Live Demo → [InsightStream](https://news-aggregator-ten-sandy.vercel.app/)**
 
 ---
 

@@ -62,6 +62,10 @@ def ingest():
     db = SessionLocal()
     try:
         articles = fetch_news()
+        fetched_count = len(articles)
+        inserted_count = 0
+        skipped_count = 0
+        failed_count = 0
 
         for article in articles:
             title = article.get("title")
@@ -76,12 +80,21 @@ def ingest():
                 published_time = None
 
             if title and content:
+                exists = db.query(NewsArticle).filter(
+                    NewsArticle.title == title
+                ).first()
+
+                if exists:
+                    skipped_count += 1
+                    continue
+
                 combined_text = f"{title}. {content}"
 
                 # 🔥 SAFE EMBEDDING
                 try:
                     embedding = generate_embedding(combined_text)
                 except:
+                    failed_count += 1
                     embedding = [0.0] * 384
 
                 news = NewsArticle(
@@ -94,9 +107,23 @@ def ingest():
                 )
 
                 db.add(news)
+                inserted_count += 1
+            else:
+                skipped_count += 1
 
         db.commit()
-        return {"message": "News inserted with embeddings"}
+        print(
+            "Manual ingestion complete: "
+            f"fetched={fetched_count}, inserted={inserted_count}, "
+            f"skipped={skipped_count}, embedding_failures={failed_count}"
+        )
+        return {
+            "message": "News ingestion complete",
+            "fetched": fetched_count,
+            "inserted": inserted_count,
+            "skipped": skipped_count,
+            "embedding_failures": failed_count
+        }
 
     finally:
         db.close()

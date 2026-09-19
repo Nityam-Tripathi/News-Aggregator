@@ -8,3 +8,4 @@ python-dotenv
 apscheduler
 requests
 huggingface_hub
+numpy

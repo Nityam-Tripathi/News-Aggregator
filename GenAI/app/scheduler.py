@@ -1,9 +1,10 @@
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 import requests
 from apscheduler.schedulers.background import BackgroundScheduler
+from sqlalchemy import text
 
 from .database import SessionLocal
 from .embeddings import generate_embedding
@@ -13,15 +14,17 @@ from .news_fetcher import NewsAPIError, fetch_news
 logger = logging.getLogger(__name__)
 
 _scheduler = BackgroundScheduler()
+INGESTION_LOCK_ID = 73190421
 
 
 def _parse_published_at(value):
     if not value:
         return None
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(
-            tzinfo=None
-        )
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if parsed.tzinfo is not None:
+            parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+        return parsed
     except (TypeError, ValueError):
         return None
 
@@ -32,6 +35,17 @@ def ingest_news():
     db = SessionLocal()
 
     try:
+        # Transaction-scoped PostgreSQL lock prevents duplicate ingestion when
+        # multiple API workers/instances run their own APScheduler process.
+        lock_acquired = db.execute(
+            text("SELECT pg_try_advisory_xact_lock(:lock_id)"),
+            {"lock_id": INGESTION_LOCK_ID},
+        ).scalar()
+        if not lock_acquired:
+            logger.info("Another worker is already running news ingestion")
+            db.rollback()
+            return {"skipped": "ingestion already running"}
+
         articles = fetch_news()
         inserted = 0
         skipped = 0
@@ -48,13 +62,9 @@ def ingest_news():
 
             duplicate_query = db.query(NewsArticle)
             if url:
-                exists = duplicate_query.filter(
-                    NewsArticle.url == url
-                ).first()
+                exists = duplicate_query.filter(NewsArticle.url == url).first()
             else:
-                exists = duplicate_query.filter(
-                    NewsArticle.title == title
-                ).first()
+                exists = duplicate_query.filter(NewsArticle.title == title).first()
 
             if exists:
                 skipped += 1

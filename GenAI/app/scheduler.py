@@ -1,72 +1,164 @@
+import logging
+import os
+from datetime import datetime, timezone
 
+import requests
 from apscheduler.schedulers.background import BackgroundScheduler
-from .news_fetcher import fetch_news
+from sqlalchemy import text
+
 from .database import SessionLocal
-from .models import NewsArticle
-from datetime import datetime
 from .embeddings import generate_embedding
+from .models import NewsArticle
+from .news_fetcher import NewsAPIError, fetch_news
+
+logger = logging.getLogger(__name__)
+
+_scheduler = BackgroundScheduler()
+INGESTION_LOCK_ID = 73190421
+MAX_ARTICLES_PER_INGEST = max(1, int(os.getenv("MAX_ARTICLES_PER_INGEST", "20")))
+
+
+def _parse_published_at(value):
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if parsed.tzinfo is not None:
+            parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+        return parsed
+    except (TypeError, ValueError):
+        return None
+
 
 def ingest_news():
-
-    print("🔄 Running scheduled ingestion...")
-
+    """Fetch and persist new articles without storing invalid embeddings."""
+    logger.info("Starting scheduled news ingestion")
     db = SessionLocal()
-    articles = fetch_news()
 
-    for article in articles:
-        title = article.get("title")
-        content = article.get("description") or ""
+    try:
+        # Transaction-scoped PostgreSQL lock prevents duplicate ingestion when
+        # multiple API workers/instances run their own APScheduler process.
+        lock_acquired = db.execute(
+            text("SELECT pg_try_advisory_xact_lock(:lock_id)"),
+            {"lock_id": INGESTION_LOCK_ID},
+        ).scalar()
+        if not lock_acquired:
+            logger.info("Another worker is already running news ingestion")
+            db.rollback()
+            return {"skipped": "ingestion already running"}
 
-        if not title or not content:
-            continue
+        articles = fetch_news()[:MAX_ARTICLES_PER_INGEST]
+        inserted = 0
+        skipped = 0
+        embedding_failures = 0
 
-        # Avoid duplicates
-        exists = db.query(NewsArticle).filter(
-            NewsArticle.title == title
-        ).first()
+        for article in articles:
+            title = article.get("title")
+            content = article.get("description") or ""
+            url = article.get("url")
 
-        if exists:
-            continue
+            if not title or not content:
+                skipped += 1
+                continue
 
-        combined_text = f"{title}. {content}"
-        embedding = generate_embedding(combined_text)
+            duplicate_query = db.query(NewsArticle)
+            if url:
+                exists = duplicate_query.filter(NewsArticle.url == url).first()
+            else:
+                exists = duplicate_query.filter(NewsArticle.title == title).first()
 
-        news = NewsArticle(
-            title=title,
-            content=content,
-            url=article.get("url"),
-            image_url=article.get("urlToImage"),
-            embedding=embedding
+            if exists:
+                skipped += 1
+                continue
+
+            try:
+                embedding = generate_embedding(f"{title}. {content}")
+            except (RuntimeError, ValueError):
+                embedding_failures += 1
+                logger.exception("Skipping article because embedding failed: %s", title)
+                continue
+
+            db.add(
+                NewsArticle(
+                    title=title,
+                    content=content,
+                    url=url,
+                    image_url=article.get("urlToImage"),
+                    published_at=_parse_published_at(article.get("publishedAt")),
+                    embedding=embedding,
+                )
+            )
+            inserted += 1
+
+        db.commit()
+        logger.info(
+            "Scheduled ingestion complete: fetched=%s inserted=%s skipped=%s "
+            "embedding_failures=%s",
+            len(articles),
+            inserted,
+            skipped,
+            embedding_failures,
         )
+        return {
+            "fetched": len(articles),
+            "inserted": inserted,
+            "skipped": skipped,
+            "embedding_failures": embedding_failures,
+        }
+    except NewsAPIError:
+        db.rollback()
+        logger.exception("Scheduled ingestion could not fetch news")
+        return {"error": "NewsAPI request failed"}
+    except Exception:
+        db.rollback()
+        logger.exception("Unexpected scheduled ingestion failure")
+        return {"error": "Scheduled ingestion failed"}
+    finally:
+        db.close()
 
-        db.add(news)
-
-    db.commit()
-    db.close()
-
-    print("✅ News ingestion complete")
-
-
-import os
-import requests
 
 def ping_server():
-    server_url = os.getenv("SERVER_URL", "http://127.0.0.1:8000")
+    server_url = os.getenv("SERVER_URL", "http://127.0.0.1:8000").rstrip("/")
     try:
-        requests.get(f"{server_url}/test", timeout=5)
-        print(f"🏓 Pinged {server_url}/test to keep awake")
-    except Exception as e:
-        print(f"⚠️ Ping failed: {e}")
+        response = requests.get(f"{server_url}/test", timeout=5)
+        response.raise_for_status()
+        logger.info("Pinged %s/test", server_url)
+    except requests.RequestException:
+        logger.warning("Could not ping %s/test", server_url, exc_info=True)
+
 
 def start_scheduler():
-    scheduler = BackgroundScheduler()
-    
+    """Start one scheduler instance and avoid duplicate job registration."""
+    if _scheduler.running:
+        logger.info("Scheduler is already running")
+        return
+
+    # Keep the existing immediate ingestion behaviour, but isolate failures.
     ingest_news()
 
-    # Run every 10 minutes
-    scheduler.add_job(ingest_news, "interval", minutes=10)
-    scheduler.add_job(ping_server, "interval", minutes=10)
+    _scheduler.add_job(
+        ingest_news,
+        "interval",
+        minutes=10,
+        id="news_ingestion",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    _scheduler.add_job(
+        ping_server,
+        "interval",
+        minutes=10,
+        id="server_ping",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    _scheduler.start()
+    logger.info("News scheduler started")
 
-    scheduler.start()
 
-    print("🚀 Scheduler started")
+def stop_scheduler():
+    if _scheduler.running:
+        _scheduler.shutdown(wait=False)
+        logger.info("News scheduler stopped")

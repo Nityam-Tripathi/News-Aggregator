@@ -2,7 +2,7 @@ import logging
 import os
 import re
 from collections import Counter
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -49,10 +49,10 @@ def _parse_published_at(value):
     if not value:
         return None
     try:
-        # The existing database column is timezone-naive.
-        return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(
-            tzinfo=None
-        )
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if parsed.tzinfo is not None:
+            parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+        return parsed
     except (TypeError, ValueError):
         return None
 

@@ -63,3 +63,37 @@ def test_generate_embedding_propagates_provider_failure(monkeypatch):
 
     with pytest.raises(RuntimeError, match="valid news embedding"):
         embeddings.generate_embedding("AI news")
+
+
+class FakeHTTPResponse:
+    status_code = 402
+
+
+def test_402_provider_failure_opens_circuit_breaker(monkeypatch):
+    calls = []
+
+    class PaymentRequired(Exception):
+        response = FakeHTTPResponse()
+
+    client = FakeInferenceClient(error=PaymentRequired("credits required"))
+    monkeypatch.setattr(embeddings, "client", client)
+    monkeypatch.setattr(embeddings, "_provider_blocked_until", 0.0)
+    monkeypatch.setattr(embeddings, "HF_402_COOLDOWN_SECONDS", 900)
+
+    with pytest.raises(RuntimeError, match="valid news embedding"):
+        embeddings.generate_embedding("first article")
+
+    with pytest.raises(RuntimeError, match="temporarily paused"):
+        embeddings.generate_embedding("second article")
+
+    assert len(client.calls) == 1
+
+
+def test_successful_embedding_clears_circuit_breaker(monkeypatch):
+    monkeypatch.setattr(embeddings, "_provider_blocked_until", 0.0)
+    monkeypatch.setattr(
+        embeddings, "client", FakeInferenceClient(result=np.ones(384))
+    )
+
+    assert len(embeddings.generate_embedding("AI news")) == 384
+    assert embeddings._provider_blocked_until == 0.0

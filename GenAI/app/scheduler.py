@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 _scheduler = BackgroundScheduler()
 INGESTION_LOCK_ID = 73190421
+MAX_ARTICLES_PER_INGEST = max(1, int(os.getenv("MAX_ARTICLES_PER_INGEST", "20")))
 
 
 def _parse_published_at(value):
@@ -46,7 +47,7 @@ def ingest_news():
             db.rollback()
             return {"skipped": "ingestion already running"}
 
-        articles = fetch_news()
+        articles = fetch_news()[:MAX_ARTICLES_PER_INGEST]
         inserted = 0
         skipped = 0
         embedding_failures = 0

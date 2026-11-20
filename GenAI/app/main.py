@@ -16,6 +16,7 @@ from .rag_pipeline import generate_answer
 from .scheduler import start_scheduler, stop_scheduler
 
 logger = logging.getLogger(__name__)
+MAX_ARTICLES_PER_INGEST = max(1, int(os.getenv("MAX_ARTICLES_PER_INGEST", "20")))
 
 app = FastAPI(title="AI News Aggregator")
 
@@ -63,7 +64,9 @@ def _store_articles(db, articles):
     skipped = 0
     embedding_failures = 0
 
-    for article in articles:
+    # Bound per-request work so a large NewsAPI response cannot trigger hundreds
+    # of sequential remote embedding calls and inflate process memory.
+    for article in articles[:MAX_ARTICLES_PER_INGEST]:
         title = article.get("title")
         content = article.get("description") or ""
         url = article.get("url")
@@ -238,16 +241,9 @@ def ask(query: str = Query(..., min_length=1, max_length=500)):
 def top_news():
     db = SessionLocal()
     try:
-        # Refresh the database before reading it. If the provider is down,
-        # continue serving the most recently stored articles.
-        try:
-            fresh_articles = fetch_news()
-            _store_articles(db, fresh_articles)
-            db.commit()
-        except NewsAPIError:
-            db.rollback()
-            logger.warning("News refresh failed; returning cached articles", exc_info=True)
-
+        # This endpoint is read-only. Scheduled ingestion refreshes the cache;
+        # fetching and embedding on every page request caused overlapping work
+        # and contributed to Render's memory pressure.
         articles = (
             db.query(NewsArticle)
             .order_by(NewsArticle.published_at.desc().nullslast(), NewsArticle.id.desc())

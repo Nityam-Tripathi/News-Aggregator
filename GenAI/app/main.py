@@ -1,11 +1,12 @@
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Header
+from secrets import compare_digest
 import logging
 from .database import engine, SessionLocal
 from .models import Base, NewsArticle
 from .news_fetcher import fetch_news, fetch_news_query
 from .embeddings import generate_embedding
 from .rag_pipeline import generate_answer
-from .scheduler import start_scheduler 
+from .scheduler import start_scheduler, stop_scheduler 
 
 from datetime import datetime, timedelta
 from collections import Counter
@@ -21,8 +22,8 @@ logger = logging.getLogger(__name__)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=[origin.strip() for origin in os.getenv("CORS_ORIGINS", "https://insightstream-three.vercel.app,http://localhost:5173,http://localhost:8080").split(",") if origin.strip()],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -39,6 +40,10 @@ Base.metadata.create_all(bind=engine)
 @app.on_event("startup")
 def start():
     start_scheduler()
+
+@app.on_event("shutdown")
+def shutdown():
+    stop_scheduler()
 
 @app.get("/")
 def root():
@@ -60,7 +65,12 @@ def get_db():
 
 
 @app.post("/ingest")
-def ingest():
+def ingest(x_admin_key: str = Header(default="")):
+    admin_key = os.getenv('INGEST_ADMIN_KEY')
+    if not admin_key:
+        raise HTTPException(status_code=503, detail='Manual ingestion is disabled')
+    if not compare_digest(x_admin_key.encode('utf-8'), admin_key.encode('utf-8')):
+        raise HTTPException(status_code=403, detail='Forbidden')
     db = SessionLocal()
     try:
         articles = fetch_news()

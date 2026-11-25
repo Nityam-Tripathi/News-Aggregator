@@ -1,72 +1,55 @@
-
+import logging
+from datetime import datetime, timezone
 from apscheduler.schedulers.background import BackgroundScheduler
 from .news_fetcher import fetch_news
 from .database import SessionLocal
 from .models import NewsArticle
-from datetime import datetime
 from .embeddings import generate_embedding
 
+logger = logging.getLogger(__name__)
+scheduler = BackgroundScheduler(timezone="UTC")
+
 def ingest_news():
-
-    print("🔄 Running scheduled ingestion...")
-
     db = SessionLocal()
-    articles = fetch_news()
-
-    for article in articles:
-        title = article.get("title")
-        content = article.get("description") or ""
-
-        if not title or not content:
-            continue
-
-        # Avoid duplicates
-        exists = db.query(NewsArticle).filter(
-            NewsArticle.title == title
-        ).first()
-
-        if exists:
-            continue
-
-        combined_text = f"{title}. {content}"
-        embedding = generate_embedding(combined_text)
-
-        news = NewsArticle(
-            title=title,
-            content=content,
-            url=article.get("url"),
-            image_url=article.get("urlToImage"),
-            embedding=embedding
-        )
-
-        db.add(news)
-
-    db.commit()
-    db.close()
-
-    print("✅ News ingestion complete")
-
-
-import os
-import requests
-
-def ping_server():
-    server_url = os.getenv("SERVER_URL", "http://127.0.0.1:8000")
+    inserted = 0
     try:
-        requests.get(f"{server_url}/test", timeout=5)
-        print(f"🏓 Pinged {server_url}/test to keep awake")
-    except Exception as e:
-        print(f"⚠️ Ping failed: {e}")
+        for article in fetch_news():
+            title = article.get("title")
+            content = article.get("description") or ""
+            if not title or not content:
+                continue
+            if db.query(NewsArticle).filter(NewsArticle.title == title).first():
+                continue
+            try:
+                embedding = generate_embedding(f"{title}. {content}")
+            except Exception:
+                logger.warning("Scheduled article embedding failed")
+                continue
+            published = article.get("publishedAt")
+            try:
+                timestamp = datetime.fromisoformat(published.replace("Z", "+00:00")) if published else None
+                if timestamp and timestamp.tzinfo:
+                    timestamp = timestamp.astimezone(timezone.utc).replace(tzinfo=None)
+            except (ValueError, TypeError, AttributeError):
+                timestamp = None
+            db.add(NewsArticle(title=title, content=content, url=article.get("url"),
+                image_url=article.get("urlToImage"), embedding=embedding, published_at=timestamp))
+            inserted += 1
+        db.commit()
+        logger.info("Scheduled ingestion committed %s articles", inserted)
+    except Exception:
+        db.rollback()
+        logger.exception("Scheduled ingestion failed")
+    finally:
+        db.close()
 
 def start_scheduler():
-    scheduler = BackgroundScheduler()
-    
-    ingest_news()
+    if not scheduler.running:
+        scheduler.add_job(ingest_news, "interval", minutes=30, id="ingest_news",
+                          replace_existing=True, max_instances=1, coalesce=True,
+                          next_run_time=datetime.now(timezone.utc))
+        scheduler.start()
 
-    # Run every 10 minutes
-    scheduler.add_job(ingest_news, "interval", minutes=10)
-    scheduler.add_job(ping_server, "interval", minutes=10)
-
-    scheduler.start()
-
-    print("🚀 Scheduler started")
+def stop_scheduler():
+    if scheduler.running:
+        scheduler.shutdown(wait=False)

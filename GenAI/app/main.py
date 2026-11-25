@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Query, Header
+from fastapi import FastAPI, HTTPException, Query, Header, Request, Depends
 from secrets import compare_digest
 import logging
 from .database import engine, SessionLocal
@@ -9,7 +9,9 @@ from .rag_pipeline import generate_answer
 from .scheduler import start_scheduler, stop_scheduler 
 
 from datetime import datetime, timedelta
-from collections import Counter
+from collections import Counter, deque
+from threading import Lock
+from time import monotonic
 import re
 import os
 
@@ -142,7 +144,31 @@ def ingest(x_admin_key: str = Header(default="")):
         db.close()
 
 
-@app.get("/ask")
+# Per-process limits; use a shared store for multi-worker deployments.
+_rate_lock = Lock()
+_rate_buckets = {}
+_global_requests = deque()
+
+def limit_search(request: Request):
+    now = monotonic()
+    key = request.client.host if request.client else "unknown"
+    with _rate_lock:
+        for ip, bucket in list(_rate_buckets.items()):
+            if not bucket or bucket[-1] <= now - 60:
+                del _rate_buckets[ip]
+        while _global_requests and _global_requests[0] <= now - 60:
+            _global_requests.popleft()
+        bucket = _rate_buckets.get(key, deque())
+        while bucket and bucket[0] <= now - 60:
+            bucket.popleft()
+        if len(bucket) >= 5 or len(_global_requests) >= 30:
+            raise HTTPException(status_code=429, detail="Too many search requests. Try again shortly.",
+                                headers={"Retry-After": "60"})
+        bucket.append(now)
+        _rate_buckets[key] = bucket
+        _global_requests.append(now)
+
+@app.get("/ask", dependencies=[Depends(limit_search)])
 def ask(query: str = Query(..., min_length=1, max_length=500)):
     query = query.strip()
     if not query:

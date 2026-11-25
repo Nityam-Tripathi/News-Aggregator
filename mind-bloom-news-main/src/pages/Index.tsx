@@ -1,10 +1,9 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { TrendingUp, BookOpen, Clock } from "lucide-react";
 import SearchBar from "@/components/SearchBar";
 import AnswerSection from "@/components/AnswerSection";
 import SourceCard from "@/components/SourceCard";
 import NewsCard from "@/components/NewsCard";
-import ErrorMessage from "@/components/ErrorMessage";
 import { AnswerSkeleton, SourceSkeleton } from "@/components/SkeletonLoaders";
 
 type NewsArticle = {
@@ -28,14 +27,19 @@ const Index = () => {
   const [searchState, setSearchState] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [currentQuery, setCurrentQuery] = useState("");
 
-  const [answer, setAnswer] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [newsError, setNewsError] = useState(false);
+  const [analyticsError, setAnalyticsError] = useState(false);
+  const searchController = useRef<AbortController | null>(null);
+  useEffect(() => () => searchController.current?.abort(), []);
   const [displayedAnswer, setDisplayedAnswer] = useState("");
   const [sources, setSources] = useState<any[]>([]);
 
   // 🕒 Format Date
   const formatDate = (date?: string) => {
     if (!date) return "";
-    return new Date(date).toLocaleString();
+    const parsed = new Date(date);
+    return Number.isNaN(parsed.getTime()) ? "" : parsed.toLocaleString();
   };
 
   // 🔥 Fetch Trending News
@@ -43,6 +47,7 @@ const Index = () => {
     const fetchNews = async () => {
       try {
         const res = await fetch(`${API_BASE_URL}/top-news`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
 
         const formatted = data.map((item: any, index: number) => ({
@@ -58,6 +63,7 @@ const Index = () => {
         setArticles(formatted);
       } catch (error) {
         console.error("Failed to fetch news", error);
+        setNewsError(true);
       }
     };
 
@@ -69,10 +75,12 @@ const Index = () => {
     const fetchAnalytics = async () => {
       try {
         const res = await fetch(`${API_BASE_URL}/analytics`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         setAnalyticsData(data);
       } catch (error) {
         console.error("Analytics fetch error:", error);
+        setAnalyticsError(true);
       }
     };
 
@@ -97,39 +105,41 @@ const Index = () => {
 
   // 🔥 Search
   const handleSearch = useCallback(async (query: string) => {
+    query = query.trim();
+    if (!query) return;
+    searchController.current?.abort();
+    const controller = new AbortController();
+    searchController.current = controller;
     setCurrentQuery(query);
     setSearchState("loading");
-
+    setErrorMessage("");
+    setDisplayedAnswer("");
+    setSources([]);
     try {
       const res = await fetch(
-        `${API_BASE_URL}/ask?query=${encodeURIComponent(query)}`
+        `${API_BASE_URL}/ask?query=${encodeURIComponent(query)}`,
+        { signal: controller.signal }
       );
-
+      if (!res.ok) {
+        throw new Error(res.status === 429 ? "Too many searches. Please wait a minute and retry."
+          : res.status === 503 ? "AI search is temporarily unavailable. Please try again shortly."
+          : "Search failed. Please try again.");
+      }
       const data = await res.json();
-
-      const fullAnswer = data.answer || "";
-
-      setAnswer(fullAnswer);
-      setDisplayedAnswer("");
-
-      let i = 0;
-      const interval = setInterval(() => {
-        i++;
-        setDisplayedAnswer(fullAnswer.slice(0, i));
-        if (i >= fullAnswer.length) clearInterval(interval);
-      }, 15);
-
-      const formattedSources = (data.sources || []).map((s: any) => ({
-        ...s,
-        image_url: s.image,
-        published_at: s.published_at, // ✅ NEW
-      }));
-
-      setSources(formattedSources);
+      if (controller.signal.aborted) return;
+      if (typeof data.answer !== "string" || !Array.isArray(data.sources)) {
+        throw new Error("Unexpected search response. Please retry.");
+      }
+      setDisplayedAnswer(data.answer);
+      setSources(data.sources.map((s: any) => ({
+        ...s, image_url: s.image, published_at: s.published_at,
+        source: (() => { try { return new URL(s.url).hostname; } catch { return "News source"; } })(),
+        publishDate: ""
+      })));
       setSearchState("done");
-
     } catch (error) {
-      console.error("API ERROR:", error);
+      if (controller.signal.aborted) return;
+      setErrorMessage(error instanceof Error ? error.message : "Search failed. Please retry.");
       setSearchState("error");
     }
   }, []);
@@ -199,7 +209,7 @@ const Index = () => {
           </div>
         )}
 
-        {searchState === "error" && <ErrorMessage />}
+        {searchState === "error" && <p role="alert" className="text-destructive text-center">{errorMessage}</p>}
 
         {/* Trending */}
         <section>
@@ -209,6 +219,7 @@ const Index = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {newsError && <p role="alert">News is temporarily unavailable.</p>}
             {articles.map((article, i) => (
               <div key={article.id} className="relative">
                 <NewsCard
@@ -234,7 +245,7 @@ const Index = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-white p-4 rounded-xl shadow">
               <h3 className="text-sm text-muted-foreground">Total Articles</h3>
-              <p className="text-2xl font-bold">{analyticsData.length}</p>
+              <p className="text-2xl font-bold">{analyticsError ? "Unavailable" : analyticsData.length}</p>
             </div>
 
             <div className="bg-white p-4 rounded-xl shadow col-span-2">

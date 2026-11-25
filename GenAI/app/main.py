@@ -2,6 +2,8 @@ from fastapi import FastAPI, HTTPException, Query, Header, Request, Depends
 from secrets import compare_digest
 import logging
 from .database import engine, SessionLocal
+from .url_identity import url_key
+from sqlalchemy.dialects.postgresql import insert
 from .models import Base, NewsArticle
 from .news_fetcher import fetch_news, fetch_news_query
 from .embeddings import generate_embedding
@@ -30,14 +32,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-try:
-    with engine.connect() as conn:
-        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
-        conn.commit()
-except Exception as e:
-    print(f"Warning: Could not create vector extension automatically: {e}")
-
-Base.metadata.create_all(bind=engine)
+# Schema changes are managed explicitly by Alembic.
 
 @app.on_event("startup")
 def start():
@@ -104,9 +99,8 @@ def ingest(x_admin_key: str = Header(default="")):
                 published_time = None
 
             if title and content:
-                exists = db.query(NewsArticle).filter(
-                    NewsArticle.title == title
-                ).first()
+                key = url_key(article.get("url"))
+            exists = db.query(NewsArticle).filter(NewsArticle.url_key == key).first() if key else db.query(NewsArticle).filter(NewsArticle.title == title).first()
 
                 if exists:
                     skipped_count += 1
@@ -122,7 +116,7 @@ def ingest(x_admin_key: str = Header(default="")):
                     failed_count += 1
                     continue
 
-                news = NewsArticle(
+                news = insert(NewsArticle).values(url_key=key,
                     title=title,
                     content=content,
                     url=article.get("url"),
@@ -131,8 +125,9 @@ def ingest(x_admin_key: str = Header(default="")):
                     embedding=embedding
                 )
 
-                db.add(news)
-                inserted_count += 1
+                result = db.execute(news.on_conflict_do_nothing(index_elements=["url_key"]))
+                inserted_count += result.rowcount
+                skipped_count += 1 - result.rowcount
             else:
                 skipped_count += 1
 
@@ -195,9 +190,8 @@ def ask(query: str = Query(..., min_length=1, max_length=500)):
             if not title or not content:
                 continue
 
-            exists = db.query(NewsArticle).filter(
-                NewsArticle.title == title
-            ).first()
+            key = url_key(article.get("url"))
+            exists = db.query(NewsArticle).filter(NewsArticle.url_key == key).first() if key else db.query(NewsArticle).filter(NewsArticle.title == title).first()
 
             if exists:
                 continue
@@ -219,7 +213,7 @@ def ask(query: str = Query(..., min_length=1, max_length=500)):
             except:
                 published_time = None
 
-            news = NewsArticle(
+            news = insert(NewsArticle).values(url_key=key,
                 title=title,
                 content=content,
                 url=article.get("url"),
@@ -228,7 +222,7 @@ def ask(query: str = Query(..., min_length=1, max_length=500)):
                 embedding=embedding
             )
 
-            db.add(news)
+            db.execute(news.on_conflict_do_nothing(index_elements=["url_key"]))
 
         db.commit()
 

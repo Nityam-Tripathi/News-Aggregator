@@ -4,6 +4,8 @@ from datetime import datetime, timezone
 from apscheduler.schedulers.background import BackgroundScheduler
 from .news_fetcher import fetch_news
 from .database import SessionLocal
+from .url_identity import url_key
+from sqlalchemy.dialects.postgresql import insert
 from .models import NewsArticle
 from .embeddings import generate_embedding
 
@@ -25,7 +27,8 @@ def ingest_news():
             content = article.get("description") or ""
             if not title or not content:
                 continue
-            if db.query(NewsArticle).filter(NewsArticle.title == title).first():
+            key = url_key(article.get("url"))
+            if db.query(NewsArticle).filter(NewsArticle.url_key == key if key else NewsArticle.title == title).first():
                 continue
             try:
                 embedding = generate_embedding(f"{title}. {content}")
@@ -44,9 +47,9 @@ def ingest_news():
                     timestamp = timestamp.astimezone(timezone.utc).replace(tzinfo=None)
             except (ValueError, TypeError, AttributeError):
                 timestamp = None
-            db.add(NewsArticle(title=title, content=content, url=article.get("url"),
-                image_url=article.get("urlToImage"), embedding=embedding, published_at=timestamp))
-            inserted += 1
+            statement = insert(NewsArticle).values(url_key=key, title=title, content=content, url=article.get("url"),
+                image_url=article.get("urlToImage"), embedding=embedding, published_at=timestamp)
+            inserted += db.execute(statement.on_conflict_do_nothing(index_elements=["url_key"])).rowcount
         db.commit()
         logger.info("Scheduled ingestion committed %s articles", inserted)
     except Exception:

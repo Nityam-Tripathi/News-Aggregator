@@ -52,6 +52,16 @@ def root():
     return {"message": "AI News Aggregator running"}
 
 
+@app.get("/ready")
+def ready():
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except Exception:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    return {"status": "ok", "database": "reachable"}
+
+
 @app.get("/test")
 def test():
     return {"status": "ok"}
@@ -176,7 +186,7 @@ def ask(query: str = Query(..., min_length=1, max_length=500)):
     db = SessionLocal()
 
     try:
-        fresh_articles = fetch_news_query(query)
+        fresh_articles = fetch_news_query(query) if os.getenv("SEARCH_FETCH_FRESH", "false").lower() == "true" else []
 
         for article in fresh_articles:
             title = article.get("title")

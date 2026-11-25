@@ -16,7 +16,11 @@ def ingest_news():
     consecutive_failures = 0
     logger.warning("Scheduled ingestion embedding provider: %s", os.getenv("EMBEDDING_PROVIDER", "hf"))
     try:
-        for article in fetch_news():
+        articles = fetch_news()
+        if not articles:
+            logger.warning("Scheduled ingestion received no articles; freshness not confirmed")
+            return
+        for article in articles:
             title = article.get("title")
             content = article.get("description") or ""
             if not title or not content:
@@ -53,7 +57,7 @@ def ingest_news():
 
 def start_scheduler():
     if not scheduler.running:
-        scheduler.add_job(ingest_news, "interval", minutes=30, id="ingest_news",
+        scheduler.add_job(ingest_news, "interval", minutes=max(180, int(os.getenv("INGEST_INTERVAL_MINUTES", "240"))), id="ingest_news",
                           replace_existing=True, max_instances=1, coalesce=True,
                           next_run_time=datetime.now(timezone.utc))
         scheduler.start()

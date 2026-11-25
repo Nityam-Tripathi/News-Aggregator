@@ -1,0 +1,35 @@
+name: Phase 2 migration checks
+on:
+  push:
+    branches: [phase-2-database]
+permissions:
+  contents: read
+jobs:
+  migrations:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: phase2_test
+        ports:
+          - 5432:5432
+        options: --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:test@localhost:5432/phase2_test
+      ALLOW_PHASE2_MIGRATIONS: "yes"
+    defaults:
+      run:
+        working-directory: GenAI
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - run: alembic upgrade head
+      - run: alembic current
+      - run: alembic downgrade 0001_baseline
+      - run: alembic upgrade head
+      - run: python -m unittest discover -s tests -v

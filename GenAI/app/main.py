@@ -8,7 +8,7 @@ from .embeddings import generate_embedding
 from .rag_pipeline import generate_answer
 from .scheduler import start_scheduler, stop_scheduler 
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from collections import Counter, deque
 from threading import Lock
 from time import monotonic
@@ -17,7 +17,7 @@ import os
 
 from fastapi.middleware.cors import CORSMiddleware
 
-from sqlalchemy import text
+from sqlalchemy import text, func
 
 app = FastAPI()
 logger = logging.getLogger(__name__)
@@ -268,6 +268,21 @@ def ask(query: str = Query(..., min_length=1, max_length=500)):
             ]
         }
 
+    finally:
+        db.close()
+
+
+@app.get("/freshness")
+def freshness():
+    db = SessionLocal()
+    try:
+        latest = db.query(func.max(NewsArticle.published_at)).scalar()
+        if latest is None:
+            return {"latest_published_at": None, "age_hours": None, "stale": True}
+        if latest.tzinfo is None:
+            latest = latest.replace(tzinfo=timezone.utc)
+        age = max(0, (datetime.now(timezone.utc) - latest).total_seconds() / 3600)
+        return {"latest_published_at": latest.isoformat(), "age_hours": round(age, 2), "stale": age >= 24}
     finally:
         db.close()
 

@@ -28,6 +28,14 @@ const Index = () => {
   const [currentQuery, setCurrentQuery] = useState("");
 
   const [errorMessage, setErrorMessage] = useState("");
+  const [freshness, setFreshness] = useState<{stale: boolean; latest_published_at: string | null} | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(`${API_BASE_URL}/freshness`, {signal: controller.signal})
+      .then(r => { if (!r.ok) throw new Error("Freshness unavailable"); return r.json(); })
+      .then(data => setFreshness(data)).catch(() => {});
+    return () => controller.abort();
+  }, []);
   const [newsError, setNewsError] = useState(false);
   const [analyticsError, setAnalyticsError] = useState(false);
   const searchController = useRef<AbortController | null>(null);
@@ -161,6 +169,7 @@ const Index = () => {
             News<span className="text-primary">AI</span>
           </h1>
 
+          <p className="text-sm text-muted-foreground mb-3" role="status">{freshness ? (freshness.stale ? "News may be outdated. Answers use stored articles." : "Answers use stored news articles.") : "News freshness not verified."}{freshness?.latest_published_at ? ` Latest stored publication: ${formatDate(freshness.latest_published_at)}.` : ""}</p>
           <SearchBar
             onSearch={handleSearch}
             isLoading={searchState === "loading"}

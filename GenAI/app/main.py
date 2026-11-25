@@ -1,4 +1,5 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Query
+import logging
 from .database import engine, SessionLocal
 from .models import Base, NewsArticle
 from .news_fetcher import fetch_news, fetch_news_query
@@ -16,6 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 app = FastAPI()
+logger = logging.getLogger(__name__)
 
 app.add_middleware(
     CORSMiddleware,
@@ -93,9 +95,10 @@ def ingest():
                 # 🔥 SAFE EMBEDDING
                 try:
                     embedding = generate_embedding(combined_text)
-                except:
+                except Exception:
+                    logger.exception('Article embedding failed')
                     failed_count += 1
-                    embedding = [0.0] * 384
+                    continue
 
                 news = NewsArticle(
                     title=title,
@@ -130,7 +133,10 @@ def ingest():
 
 
 @app.get("/ask")
-def ask(query: str):
+def ask(query: str = Query(..., min_length=1, max_length=500)):
+    query = query.strip()
+    if not query:
+        raise HTTPException(status_code=422, detail='Query must not be blank')
     db = SessionLocal()
 
     try:
@@ -154,8 +160,9 @@ def ask(query: str):
 
             try:
                 embedding = generate_embedding(combined)
-            except:
-                embedding = [0.0] * 384
+            except Exception:
+                logger.exception('Article embedding failed')
+                continue
 
             published = article.get("publishedAt")
 
@@ -180,11 +187,16 @@ def ask(query: str):
         db.commit()
 
         # 🔍 Semantic Search using pgvector cosine distance
-        query_embedding = generate_embedding(query)
+        try:
+            query_embedding = generate_embedding(query)
+        except Exception:
+            logger.exception('Query embedding failed')
+            raise HTTPException(status_code=503, detail='Search temporarily unavailable')
 
-        results = db.query(NewsArticle).order_by(
-            NewsArticle.embedding.cosine_distance(query_embedding)
-        ).limit(5).all()
+        distance = NewsArticle.embedding.cosine_distance(query_embedding)
+        results = db.query(NewsArticle).filter(distance <= 0.65).order_by(distance).limit(5).all()
+        if not results:
+            return {'query': query, 'answer': 'No sufficiently relevant news articles found.', 'sources': []}
 
         context = "\n\n".join([
             f"{a.title}. {a.content}" for a in results
@@ -192,8 +204,9 @@ def ask(query: str):
 
         try:
             answer = generate_answer(query, context)
-        except:
-            answer = context[:500]
+        except Exception:
+            logger.exception('Answer generation failed')
+            raise HTTPException(status_code=503, detail='Answer generation temporarily unavailable')
 
         return {
             "query": query,
@@ -203,7 +216,7 @@ def ask(query: str):
                     "title": a.title,
                     "url": a.url,
                     "image": a.image_url,
-                    "published_at": str(a.published_at)
+                    "published_at": a.published_at.isoformat() if a.published_at else None
                 }
                 for a in results
             ]
@@ -215,11 +228,10 @@ def ask(query: str):
 
 @app.get("/top-news")
 def top_news():
-    fresh = fetch_news()
     db = SessionLocal()
     try:
         articles = db.query(NewsArticle).order_by(
-            NewsArticle.id.desc()
+            NewsArticle.published_at.desc().nullslast(), NewsArticle.id.desc()
         ).limit(10).all()
 
         return [
@@ -228,7 +240,7 @@ def top_news():
                 "url": a.url,
                 "image": a.image_url,
                 "content": a.content,
-                "published_at": str(a.published_at)
+                "published_at": a.published_at.isoformat() if a.published_at else None
             }
             for a in articles
         ]

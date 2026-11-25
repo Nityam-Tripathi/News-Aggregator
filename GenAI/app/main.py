@@ -100,7 +100,7 @@ def ingest(x_admin_key: str = Header(default="")):
 
             if title and content:
                 key = url_key(article.get("url"))
-            exists = db.query(NewsArticle).filter(NewsArticle.url_key == key).first() if key else db.query(NewsArticle).filter(NewsArticle.title == title).first()
+                exists = db.query(NewsArticle).filter(NewsArticle.url_key == key).first() if key else db.query(NewsArticle).filter(NewsArticle.title == title).first()
 
                 if exists:
                     skipped_count += 1

@@ -8,7 +8,7 @@ load_dotenv()
 def generate_answer(query: str, context: str):
     client = Groq(api_key=os.getenv("GROQ_API_KEY"), timeout=20.0, max_retries=1)
     response = client.chat.completions.create(
-        model="llama-3.1-8b-instant",
+        model=os.getenv("GROQ_MODEL", "llama-3.1-8b-instant").strip(),
         messages=[
             {"role": "system", "content": (
                 "You are a news assistant. Answer only using the supplied news context. "

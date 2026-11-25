@@ -9,3 +9,4 @@ apscheduler
 requests
 huggingface_hub
 numpy
+fastembed>=0.6,<1

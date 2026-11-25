@@ -1,4 +1,5 @@
 import logging
+import os
 from datetime import datetime, timezone
 from apscheduler.schedulers.background import BackgroundScheduler
 from .news_fetcher import fetch_news
@@ -12,6 +13,8 @@ scheduler = BackgroundScheduler(timezone="UTC")
 def ingest_news():
     db = SessionLocal()
     inserted = 0
+    consecutive_failures = 0
+    logger.warning("Scheduled ingestion embedding provider: %s", os.getenv("EMBEDDING_PROVIDER", "hf"))
     try:
         for article in fetch_news():
             title = article.get("title")
@@ -22,9 +25,14 @@ def ingest_news():
                 continue
             try:
                 embedding = generate_embedding(f"{title}. {content}")
-            except Exception:
-                logger.warning("Scheduled article embedding failed")
+            except Exception as exc:
+                consecutive_failures += 1
+                logger.error("Scheduled embedding failed: %s (HTTP status: %s)", type(exc).__name__, getattr(getattr(exc, "response", None), "status_code", None))
+                if consecutive_failures >= 3:
+                    logger.error("Stopping ingestion after three consecutive embedding failures")
+                    break
                 continue
+            consecutive_failures = 0
             published = article.get("publishedAt")
             try:
                 timestamp = datetime.fromisoformat(published.replace("Z", "+00:00")) if published else None

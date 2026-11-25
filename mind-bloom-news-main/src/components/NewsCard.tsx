@@ -4,7 +4,14 @@ const NewsCard = ({ article, index, onBookmark }: any) => {
   return (
     <div
       className="group rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 bg-white cursor-pointer"
-      onClick={() => window.open(article.url, "_blank")}
+      onClick={() => {
+        try {
+          const url = new URL(article.url);
+          if (url.protocol === "https:" || url.protocol === "http:") {
+            window.open(url.href, "_blank", "noopener,noreferrer");
+          }
+        } catch { /* Ignore malformed article links. */ }
+      }}
     >
       {/* 🖼️ Image */}
       <div className="h-40 w-full overflow-hidden">

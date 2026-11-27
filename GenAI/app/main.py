@@ -4,6 +4,7 @@ import logging
 from .database import engine, SessionLocal
 from .ingestion import ingest_articles
 from .answer_cache import answer_cache, cache_key
+from .answer_quality import assess_answer, evidence_context, FALLBACK
 from fastapi.responses import StreamingResponse
 import json
 from contextlib import aclosing
@@ -132,9 +133,9 @@ def prepare_answer(query):
             logger.warning("Query embedding failed")
             raise HTTPException(status_code=503, detail="Search temporarily unavailable")
         results = search_articles(db, query, embedding)
-        context = "\n\n".join(f"{a.title}. {a.content}" for a in results)
-        sources = [{"title":a.title,"url":a.url,"image":a.image_url,
-            "published_at":a.published_at.isoformat() if a.published_at else None} for a in results]
+        context = evidence_context(results)
+        sources = [{"source_id":i,"title":a.title,"url":a.url,"image":a.image_url,
+            "published_at":a.published_at.isoformat() if a.published_at else None} for i,a in enumerate(results,1)]
         return query, context, sources
     finally:
         db.close()
@@ -152,8 +153,14 @@ def ask(query: str = Query(..., min_length=1, max_length=500)):
         except Exception:
             logger.warning("Answer generation failed")
             raise HTTPException(status_code=503, detail="Answer generation temporarily unavailable")
-        answer_cache.put(key, answer)
-    return {"query":query,"answer":answer,"sources":sources}
+        quality = assess_answer(answer, context, len(sources))
+        if not quality.accepted:
+            logger.info("Answer evidence screening flagged: %s", quality.issues)
+            return {"query":query,"answer":FALLBACK,"sources":sources,"quality":"flagged"}
+        if quality.status == "screened":
+            answer_cache.put(key, answer)
+    return {"query":query,"answer":answer,"sources":sources,
+            "quality":assess_answer(answer, context, len(sources)).status}
 
 def sse(event, data):
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
@@ -179,8 +186,13 @@ async def answer_events(query, context, sources):
         answer = "".join(parts)
         if not answer.strip():
             raise ValueError("Empty answer stream")
-        answer_cache.put(key, answer)
-        yield sse("done", {})
+        quality = assess_answer(answer, context, len(sources))
+        if not quality.accepted:
+            logger.info("Stream evidence screening flagged: %s", quality.issues)
+            yield sse("replace", {"text":FALLBACK})
+        elif quality.status == "screened":
+            answer_cache.put(key, answer)
+        yield sse("done", {"quality":quality.status})
     except Exception:
         logger.warning("Answer streaming failed")
         yield sse("error", {"message":"Answer generation interrupted. Please retry."})

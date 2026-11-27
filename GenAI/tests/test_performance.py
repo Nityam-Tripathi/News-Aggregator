@@ -78,14 +78,15 @@ class StreamTests(unittest.TestCase):
         self.addCleanup(main._rate_buckets.clear)
         self.addCleanup(main._global_requests.clear)
         self.client = TestClient(main.app)
-        self.sources = [{"title":"Article","url":"https://example.org","image":None,"published_at":None}]
+        self.sources = [{"source_id":1,"title":"Article","url":"https://example.org","image":None,"published_at":None}]
+        self.context = json.dumps([{"source_id":1,"title":"Article","content":"Hello world."}])
 
     @patch("app.main.prepare_answer")
     def test_stream_and_cache(self,prepare):
-        prepare.return_value = ("query","evidence",self.sources)
+        prepare.return_value = ("query",self.context,self.sources)
         async def chunks(*args):
             yield "Hello "
-            yield "world"
+            yield "world [1]"
         with patch("app.main.stream_answer",side_effect=chunks) as stream:
             response = self.client.get("/ask/stream",params={"query":"query"})
             self.assertEqual(response.status_code,200)
@@ -95,12 +96,12 @@ class StreamTests(unittest.TestCase):
             self.assertIn('event: done',response.text)
             self.assertIn("Hello ",response.text)
             again = self.client.get("/ask",params={"query":"query"})
-            self.assertEqual(again.json()["answer"],"Hello world")
+            self.assertEqual(again.json()["answer"],"Hello world [1]")
             stream.assert_called_once()
 
     @patch("app.main.prepare_answer")
     def test_failed_stream_not_cached(self,prepare):
-        prepare.return_value = ("query","evidence",self.sources)
+        prepare.return_value = ("query",self.context,self.sources)
         async def broken(*args):
             yield "partial"
             raise RuntimeError("offline")

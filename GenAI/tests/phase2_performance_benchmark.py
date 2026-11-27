@@ -130,6 +130,7 @@ def endpoint_bench(articles):
                 url=a["url"],url_key=url_key(a["url"]),published_at=datetime.fromisoformat(a["date"]),
                 embedding=generate_embedding(a["title"]+". "+a["content"])))
         db.commit()
+    global CHUNKS, ANSWER
     calls={"stream":0,"json":0}
     closed=Event()
     mode=["normal"]
@@ -160,6 +161,10 @@ def endpoint_bench(articles):
                 # Confirm real evidence is retrieved and warm the query embedding/database path.
                 prepared=main.prepare_answer(query)
                 assert prepared[2], "No evidence for benchmark query"
+                excerpt=json.loads(prepared[1])[0]["content"]
+                ANSWER=excerpt+" [1]"
+                width=max(1,len(excerpt)//3)
+                CHUNKS=[excerpt[:width],excerpt[width:2*width],excerpt[2*width:]," [1]"]
                 key=cache_key(*prepared,main.model_name(),main.PROMPT_VERSION)
                 for _ in range(15):
                     cache.entries.clear() # no active request when resetting

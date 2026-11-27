@@ -34,8 +34,10 @@ class SecurityTests(unittest.TestCase):
         self.assertEqual(response.status_code, 429)
         self.assertEqual(response.headers["Retry-After"], "60")
 
-    @patch.object(main.engine, "connect")
-    def test_readiness(self, connect):
-        self.assertEqual(self.client.get("/ready").status_code, 200)
-        connect.side_effect = RuntimeError("offline")
+    @patch.object(main, "verify_deployment")
+    def test_readiness(self, verify):
+        response = self.client.get("/ready")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["schema_revision"], main.EXPECTED_REVISION)
+        verify.side_effect = RuntimeError("offline")
         self.assertEqual(self.client.get("/ready").status_code, 503)

@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException, Query, Header, Request, Depends
 from secrets import compare_digest
 import logging
 from .database import engine, SessionLocal
+from .deployment import verify_deployment, EXPECTED_REVISION
 from .ingestion import ingest_articles
 from .answer_cache import answer_cache, cache_key
 from .answer_quality import assess_answer, evidence_context, FALLBACK
@@ -41,6 +42,11 @@ app.add_middleware(
 
 @app.on_event("startup")
 def start():
+    # Do not serve traffic or start ingestion against an unverified database.
+    try:
+        verify_deployment()
+    except Exception:
+        raise RuntimeError('Phase 2 database identity or schema verification failed') from None
     start_scheduler()
 
 @app.on_event("shutdown")
@@ -55,11 +61,10 @@ def root():
 @app.get("/ready")
 def ready():
     try:
-        with engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
+        verify_deployment()
     except Exception:
-        raise HTTPException(status_code=503, detail="Database unavailable")
-    return {"status": "ok", "database": "reachable"}
+        raise HTTPException(status_code=503, detail="Database identity or schema not ready") from None
+    return {"status": "ok", "database": "reachable", "schema_revision": EXPECTED_REVISION}
 
 
 @app.get("/test")

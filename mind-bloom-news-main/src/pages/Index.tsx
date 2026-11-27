@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { TrendingUp, BookOpen, Clock } from "lucide-react";
 import SearchBar from "@/components/SearchBar";
+import { consumeAnswerStream } from "@/lib/answerStream";
 import AnswerSection from "@/components/AnswerSection";
 import SourceCard from "@/components/SourceCard";
 import NewsCard from "@/components/NewsCard";
@@ -24,7 +25,7 @@ const API_BASE_URL =
 const Index = () => {
   const [articles, setArticles] = useState<NewsArticle[]>([]);
   const [analyticsData, setAnalyticsData] = useState<any[]>([]);
-  const [searchState, setSearchState] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [searchState, setSearchState] = useState<"idle" | "loading" | "streaming" | "done" | "error">("idle");
   const [currentQuery, setCurrentQuery] = useState("");
 
   const [errorMessage, setErrorMessage] = useState("");
@@ -125,26 +126,30 @@ const Index = () => {
     setSources([]);
     try {
       const res = await fetch(
-        `${API_BASE_URL}/ask?query=${encodeURIComponent(query)}`,
-        { signal: controller.signal }
+        `${API_BASE_URL}/ask/stream?query=${encodeURIComponent(query)}`,
+        { signal: controller.signal, headers: { Accept: "text/event-stream" } }
       );
       if (!res.ok) {
         throw new Error(res.status === 429 ? "Too many searches. Please wait a minute and retry."
           : res.status === 503 ? "AI search is temporarily unavailable. Please try again shortly."
           : "Search failed. Please try again.");
       }
-      const data = await res.json();
-      if (controller.signal.aborted) return;
-      if (typeof data.answer !== "string" || !Array.isArray(data.sources)) {
-        throw new Error("Unexpected search response. Please retry.");
-      }
-      setDisplayedAnswer(data.answer);
-      setSources(data.sources.map((s: any) => ({
-        ...s, image_url: s.image, published_at: s.published_at,
-        source: (() => { try { return new URL(s.url).hostname; } catch { return "News source"; } })(),
-        publishDate: ""
-      })));
-      setSearchState("done");
+      await consumeAnswerStream(res, {
+        onSources: (items) => {
+          if (controller.signal.aborted) return;
+          setSources(items.map((s: any) => ({
+            ...s, image_url: s.image, published_at: s.published_at,
+            source: (() => { try { return new URL(s.url).hostname; } catch { return "News source"; } })(),
+            publishDate: ""
+          })));
+        },
+        onDelta: (delta) => {
+          if (controller.signal.aborted) return;
+          setDisplayedAnswer(prev => prev + delta);
+          setSearchState("streaming");
+        }
+      });
+      if (!controller.signal.aborted) setSearchState("done");
     } catch (error) {
       if (controller.signal.aborted) return;
       setErrorMessage(error instanceof Error ? error.message : "Search failed. Please retry.");
@@ -172,7 +177,7 @@ const Index = () => {
           <p className="text-sm text-muted-foreground mb-3" role="status">{freshness ? (freshness.stale ? "News may be outdated. Answers use stored articles." : "Answers use stored news articles.") : "News freshness not verified."}{freshness?.latest_published_at ? ` Latest stored publication: ${formatDate(freshness.latest_published_at)}.` : ""}</p>
           <SearchBar
             onSearch={handleSearch}
-            isLoading={searchState === "loading"}
+            isLoading={searchState === "loading" || searchState === "streaming"}
             large={searchState === "idle"}
           />
         </div>
@@ -191,9 +196,10 @@ const Index = () => {
         )}
 
         {/* Answer */}
-        {searchState === "done" && (
+        {(searchState === "done" || searchState === "streaming") && (
           <div className="space-y-6">
             <AnswerSection answer={displayedAnswer} query={currentQuery} />
+            {searchState === "streaming" && <p role="status" className="text-sm text-muted-foreground">Generating answer…</p>}
 
             <div>
               <div className="flex items-center gap-2 mb-3">

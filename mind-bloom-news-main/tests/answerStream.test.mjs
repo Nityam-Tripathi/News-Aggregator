@@ -34,3 +34,11 @@ test("rejects explicit error",async()=>{
     onSources:()=>{},onDelta:()=>{}
   }),/provider offline/);
 });
+
+test("replaces provisional text after evidence screening",async()=>{
+  let text="";
+  await consumeAnswerStream(response(event("delta",{text:"unsupported claim"})+event("replace",{text:"Cannot verify."})+event("done",{quality:"flagged"})),{
+    onSources:()=>{},onDelta:x=>text+=x,onReplace:x=>text=x
+  });
+  assert.equal(text,"Cannot verify.");
+});

@@ -1,6 +1,7 @@
 export type StreamCallbacks = {
   onSources: (sources: any[]) => void;
   onDelta: (text: string) => void;
+  onReplace?: (text: string) => void;
 };
 
 export async function consumeAnswerStream(response: Response, callbacks: StreamCallbacks) {
@@ -31,6 +32,10 @@ export async function consumeAnswerStream(response: Response, callbacks: StreamC
           if (typeof data.text !== "string") throw new Error("Invalid answer chunk.");
           hasText ||= !!data.text.trim();
           callbacks.onDelta(data.text);
+        } else if (event === "replace") {
+          if (typeof data.text !== "string" || !callbacks.onReplace) throw new Error("Answer verification failed.");
+          hasText = !!data.text.trim();
+          callbacks.onReplace(data.text);
         } else if (event === "error") {
           throw new Error(typeof data.message === "string" ? data.message : "Answer interrupted.");
         } else if (event === "done") {

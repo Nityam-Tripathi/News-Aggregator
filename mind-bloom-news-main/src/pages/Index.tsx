@@ -143,6 +143,9 @@ const Index = () => {
             publishDate: ""
           })));
         },
+        onReplace: (text) => {
+          if (!controller.signal.aborted) setDisplayedAnswer(text);
+        },
         onDelta: (delta) => {
           if (controller.signal.aborted) return;
           setDisplayedAnswer(prev => prev + delta);
@@ -198,7 +201,7 @@ const Index = () => {
         {/* Answer */}
         {(searchState === "done" || searchState === "streaming") && (
           <div className="space-y-6">
-            <AnswerSection answer={displayedAnswer} query={currentQuery} />
+            <AnswerSection answer={displayedAnswer} query={currentQuery} sourceCount={sources.length} provisional={searchState === "streaming"} />
             {searchState === "streaming" && <p role="status" className="text-sm text-muted-foreground">Generating answer…</p>}
 
             <div>
@@ -209,7 +212,8 @@ const Index = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {sources.map((s, i) => (
-                  <div key={i} className="bg-white p-3 rounded shadow">
+                  <div key={i} id={`source-${i+1}`} className="bg-white p-3 rounded shadow scroll-mt-24">
+                    <span className="text-xs font-semibold text-primary">[{i+1}]</span>
                     <SourceCard source={s} index={i} />
 
                     {/* 🕒 Source time */}

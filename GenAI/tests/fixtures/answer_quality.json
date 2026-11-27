@@ -1,0 +1,151 @@
+{
+  "description": "Hand-authored contrastive answer candidates against existing curated news excerpts; labels concern evidence support or citation integrity, not live generation. Known difficult contradictions included.",
+  "cases": [
+    {
+      "id": "supported_lunar",
+      "source_ids": [
+        "artemis-flyby"
+      ],
+      "answer": "The astronauts completed seven hours of lunar observations, photographing the far side. [1]",
+      "should_flag": false,
+      "category": "supported"
+    },
+    {
+      "id": "supported_dart",
+      "source_ids": [
+        "dart-result"
+      ],
+      "answer": "NASA confirmed that the impact altered Dimorphos's motion, demonstrating asteroid deflection. [1]",
+      "should_flag": false,
+      "category": "supported"
+    },
+    {
+      "id": "supported_vaccine",
+      "source_ids": [
+        "malaria-rec"
+      ],
+      "answer": "R21/Matrix-M received a recommendation for preventing malaria in children. [1]",
+      "should_flag": false,
+      "category": "supported"
+    },
+    {
+      "id": "supported_multiple",
+      "source_ids": [
+        "webb",
+        "euclid"
+      ],
+      "answer": "The James Webb Space Telescope began scientific operations with infrared images and spectra of the cosmos. [1]\nESA's space telescope released its first full-color cosmic photographs, including galaxies in the Perseus cluster. [2]",
+      "should_flag": false,
+      "category": "supported"
+    },
+    {
+      "id": "supported_ai",
+      "source_ids": [
+        "ai-law"
+      ],
+      "answer": "The European Union adopted a legal framework governing artificial intelligence systems, with phased application. [1]",
+      "should_flag": false,
+      "category": "supported"
+    },
+    {
+      "id": "supported_paraphrase",
+      "source_ids": [
+        "artemis-photos"
+      ],
+      "answer": "Photographs from Orion show the Moon, Earth and a solar eclipse. [1]",
+      "should_flag": false,
+      "category": "supported"
+    },
+    {
+      "id": "missing_cite",
+      "source_ids": [
+        "artemis-flyby"
+      ],
+      "answer": "The astronauts completed seven hours of lunar observations.",
+      "should_flag": true,
+      "category": "citation"
+    },
+    {
+      "id": "invalid_cite",
+      "source_ids": [
+        "artemis-flyby"
+      ],
+      "answer": "The astronauts completed seven hours of lunar observations. [7]",
+      "should_flag": true,
+      "category": "citation"
+    },
+    {
+      "id": "wrong_source",
+      "source_ids": [
+        "malaria-rec",
+        "artemis-flyby"
+      ],
+      "answer": "The astronauts completed seven hours of lunar observations. [1]",
+      "should_flag": true,
+      "category": "misattribution"
+    },
+    {
+      "id": "wrong_number",
+      "source_ids": [
+        "artemis-flyby"
+      ],
+      "answer": "The astronauts completed 99 hours of lunar observations. [1]",
+      "should_flag": true,
+      "category": "unsupported_number"
+    },
+    {
+      "id": "fabrication",
+      "source_ids": [
+        "artemis-flyby"
+      ],
+      "answer": "Astronauts discovered an underground alien civilization. [1]",
+      "should_flag": true,
+      "category": "unsupported_claim"
+    },
+    {
+      "id": "negation",
+      "source_ids": [
+        "dart-result"
+      ],
+      "answer": "NASA confirmed that the impact did not alter Dimorphos's motion. [1]",
+      "should_flag": true,
+      "category": "contradiction"
+    },
+    {
+      "id": "reversed_roles",
+      "source_ids": [
+        "dart-impact"
+      ],
+      "answer": "The moonlet of Didymos deliberately struck NASA to test a planetary defense technique. [1]",
+      "should_flag": true,
+      "category": "contradiction"
+    },
+    {
+      "id": "wrong_word_number",
+      "source_ids": [
+        "artemis-launch"
+      ],
+      "answer": "NASA sent eight astronauts toward the Moon on the Space Launch System for a crewed lunar flyby. [1]",
+      "should_flag": true,
+      "category": "unsupported_claim"
+    },
+    {
+      "id": "fake_link",
+      "source_ids": [
+        "webb"
+      ],
+      "answer": "James Webb Space Telescope [1](https://example.com/fake)",
+      "should_flag": true,
+      "category": "citation"
+    },
+    {
+      "id": "abstain",
+      "source_ids": [
+        "webb"
+      ],
+      "answer": "The retrieved news excerpts do not provide enough evidence to answer this question.",
+      "should_flag": false,
+      "category": "abstention"
+    }
+  ]
+}

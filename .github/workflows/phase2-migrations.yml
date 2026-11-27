@@ -58,3 +58,9 @@ jobs:
           name: performance-report
           path: GenAI/performance-report.json
           if-no-files-found: error
+      - run: python tests/phase2_answer_quality_evaluation.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: answer-quality-report
+          path: GenAI/answer-quality-report.json
+          if-no-files-found: error

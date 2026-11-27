@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-PROMPT_VERSION = 'news-citations-v2'
+PROMPT_VERSION = 'news-citations-v3'
 
 def model_name():
     return os.getenv('GROQ_MODEL', 'llama-3.1-8b-instant').strip()
@@ -22,7 +22,7 @@ def completion_options(query, context):
                 "Write one short factual claim per line, each ending with one or more citations like [1] [2]. "
                 "Cite only source IDs whose excerpts directly support the claim; never invent URLs or source IDs. "
                 "Do not add a heading, uncited introduction, markdown links or unsupported numbers. "
-                "Keep wording close to the supplied excerpts and do not treat publication dates as event dates. "
+                "Keep wording and factual relationships close to the supplied excerpts. Preserve who did what, quantities, units and negation. Do not treat publication dates as event dates. "
                 "If insufficient evidence, return exactly: The retrieved news excerpts do not provide enough evidence to answer this question."
             )},
             {"role": "user", "content": json.dumps({"question": query, "news_context": context})}

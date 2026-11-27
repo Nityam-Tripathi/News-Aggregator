@@ -21,6 +21,20 @@ class QualityTests(unittest.TestCase):
             self.assertFalse(self.check(answer).accepted,answer)
     def test_number(self):
         self.assertIn("claim_1:unsupported_number",self.check("The astronauts completed 99 hours of lunar observations. [1]").issues)
+    def test_word_quantity_and_numeric_equivalence(self):
+        self.assertIn("claim_1:unsupported_number",self.check(VALID.replace("seven","eight")).issues)
+        self.assertTrue(self.check(VALID.replace("seven","7")).accepted)
+    def test_compound_cardinal(self):
+        context=json.dumps([{"source_id":1,"title":"Report","content":"The team collected twenty-one samples."}])
+        self.assertTrue(assess_answer("The team collected 21 samples. [1]",context,1).accepted)
+        self.assertFalse(assess_answer("The team collected twenty-two samples. [1]",context,1).accepted)
+    def test_reversed_roles(self):
+        context=json.dumps([{"source_id":1,"title":"DART spacecraft","content":"NASA deliberately struck the moonlet of Didymos to test a planetary defense technique."}])
+        result=assess_answer("The moonlet of Didymos deliberately struck NASA to test a planetary defense technique. [1]",context,1)
+        self.assertIn("claim_1:weak_evidence_order",result.issues)
+    def test_supported_word_order_paraphrase(self):
+        context=json.dumps([{"source_id":1,"title":"Crew sends lunar flyby photographs to Earth","content":"The Artemis II photographs show the Moon, Earth and a solar eclipse seen from Orion."}])
+        self.assertTrue(assess_answer("Photographs from Orion show the Moon, Earth and a solar eclipse. [1]",context,1).accepted)
     def test_wrong_source(self):
         self.assertFalse(self.check(VALID.replace("[1]","[2]")).accepted)
     def test_negation(self):

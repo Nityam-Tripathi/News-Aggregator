@@ -1,13 +1,9 @@
-"""Deterministic screening evaluation; no Groq calls or external judge."""
+"""Contrastive screening evaluation. Original and additional cases reported separately."""
 import json
 from pathlib import Path
-from statistics import mean
 from app.answer_quality import assess_answer
 
-def main():
-    base=Path(__file__).parent/"fixtures"
-    corpus={a["id"]:a for a in json.loads((base/"news_retrieval.json").read_text())["articles"]}
-    cases=json.loads((base/"answer_quality.json").read_text())["cases"]
+def evaluate(cases, corpus):
     rows=[]
     for case in cases:
         evidence=[{"source_id":i,"title":corpus[key]["title"],"content":corpus[key]["content"]}
@@ -21,16 +17,23 @@ def main():
     fn=sum(not r["flagged"] and r["should_flag"] for r in rows)
     precision=tp/(tp+fp) if tp+fp else 0
     recall=tp/(tp+fn) if tp+fn else 0
-    report={"cases":len(rows),"true_positive":tp,"false_positive":fp,"true_negative":tn,"false_negative":fn,
+    return {"cases":len(rows),"true_positive":tp,"false_positive":fp,"true_negative":tn,"false_negative":fn,
         "flag_precision":round(precision,4),"flag_recall":round(recall,4),
         "flag_f1":round(2*precision*recall/(precision+recall),4) if precision+recall else 0,
-        "accuracy":round((tp+tn)/len(rows),4),
-        "note":"Manual contrastive smoke test of a heuristic, not generated answer faithfulness or a general hallucination detector. False negatives are expected and reported.",
-        "results":rows}
+        "accuracy":round((tp+tn)/len(rows),4),"results":rows}
+
+def main():
+    base=Path(__file__).parent/"fixtures"
+    corpus={a["id"]:a for a in json.loads((base/"news_retrieval.json").read_text())["articles"]}
+    original=evaluate(json.loads((base/"answer_quality.json").read_text())["cases"],corpus)
+    additional=evaluate(json.loads((base/"answer_quality_additional.json").read_text())["cases"],corpus)
+    report={"original":original,"additional":additional,
+            "note":"Original cases used for tuning; additional cases are authored regression examples, not independent holdout. No live LLM generation or semantic entailment claim."}
     Path("answer-quality-report.json").write_text(json.dumps(report,indent=2))
     print(json.dumps(report,indent=2))
-    # Basic integrity checks are release gates; do not claim semantic entailment.
-    assert all(r["flagged"] for r in rows if r["category"]=="citation")
+    assert all(r["flagged"] for group in (original,additional) for r in group["results"] if r["category"]=="citation")
+    assert all(r["flagged"] for r in original["results"] if r["id"] in ("reversed_roles","wrong_word_number"))
+    assert original["false_positive"]==0, "Original supported examples regressed"
 
 if __name__=="__main__":
     main()

@@ -1,0 +1,59 @@
+{
+  "description": "Additional authored regression examples distinct from original cases; not independent held-out data. Includes expected limitations.",
+  "cases": [
+    {
+      "id": "digit_equivalence",
+      "source_ids": [
+        "artemis-home"
+      ],
+      "answer": "4 astronauts were welcomed at Johnson Space Center after their 10-day journey around the Moon. [1]",
+      "should_flag": false,
+      "category": "supported"
+    },
+    {
+      "id": "wrong_duration",
+      "source_ids": [
+        "artemis-home"
+      ],
+      "answer": "Four astronauts were welcomed at Johnson Space Center after their twelve-day journey around the Moon. [1]",
+      "should_flag": true,
+      "category": "unsupported_number"
+    },
+    {
+      "id": "supported_short",
+      "source_ids": [
+        "mpox-vaccine"
+      ],
+      "answer": "WHO prequalified MVA-BN for use against mpox. [1]",
+      "should_flag": false,
+      "category": "supported"
+    },
+    {
+      "id": "wrong_entity",
+      "source_ids": [
+        "malaria-rec"
+      ],
+      "answer": "R21/Matrix-M received a recommendation for preventing mpox in children. [1]",
+      "should_flag": true,
+      "category": "unsupported_claim"
+    },
+    {
+      "id": "semantic_paraphrase",
+      "source_ids": [
+        "artemis-depart"
+      ],
+      "answer": "An engine burn sent the spacecraft out of Earth orbit toward the Moon. [1]",
+      "should_flag": false,
+      "category": "supported"
+    },
+    {
+      "id": "invalid_citation",
+      "source_ids": [
+        "webb"
+      ],
+      "answer": "The James Webb Space Telescope began scientific operations. [2]",
+      "should_flag": true,
+      "category": "citation"
+    }
+  ]
+}

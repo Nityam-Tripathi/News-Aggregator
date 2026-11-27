@@ -8,7 +8,7 @@ from .models import Base, NewsArticle
 from .news_fetcher import fetch_news, fetch_news_query
 from .embeddings import generate_embedding
 from .rag_pipeline import generate_answer
-from .retrieval import retrieve_articles
+from .hybrid import search_articles
 from .scheduler import start_scheduler, stop_scheduler 
 
 from datetime import datetime, timedelta, timezone
@@ -234,7 +234,7 @@ def ask(query: str = Query(..., min_length=1, max_length=500)):
             logger.exception('Query embedding failed')
             raise HTTPException(status_code=503, detail='Search temporarily unavailable')
 
-        results = retrieve_articles(db, query_embedding)
+        results = search_articles(db, query, query_embedding)
         if not results:
             return {'query': query, 'answer': 'No sufficiently relevant news articles found.', 'sources': []}
 

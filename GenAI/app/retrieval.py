@@ -16,10 +16,10 @@ def settings():
         raise ValueError("HNSW_EF_SEARCH must be 40, 100, 200 or 400")
     return mode, ef
 
-def retrieve_articles(db, embedding):
+def retrieve_articles(db, embedding, limit=TOP_K):
     mode, ef = settings()
     distance = NewsArticle.embedding.cosine_distance(embedding)
-    query = db.query(NewsArticle).filter(distance <= MAX_DISTANCE).order_by(distance).limit(TOP_K)
+    query = db.query(NewsArticle).filter(distance <= MAX_DISTANCE).order_by(distance).limit(limit)
 
     def exact():
         # Transaction-local settings cannot leak into another pooled connection's requests.
@@ -36,4 +36,4 @@ def retrieve_articles(db, embedding):
     results = query.all()
     # The ANN filter can eliminate candidates. Exact fallback ensures completeness
     # when fewer than K are returned, but cannot detect incorrect full top-K results.
-    return results if len(results) == TOP_K else exact()
+    return results if len(results) == limit else exact()

@@ -33,6 +33,7 @@ jobs:
       - run: python tests/phase2_migration_check.py seed
       - run: alembic upgrade head
       - run: python tests/phase2_migration_check.py verify
+      - run: python -c "from app.database import engine; from sqlalchemy import text; c=engine.connect(); assert c.execute(text('SELECT count(*) FROM articles WHERE search_document IS NOT NULL')).scalar() == 5; c.close()"
       - run: alembic current
       - run: alembic downgrade 0001_baseline
       - run: python tests/phase2_migration_check.py verify-baseline
@@ -44,4 +45,10 @@ jobs:
         with:
           name: hnsw-report
           path: GenAI/hnsw-report.json
+          if-no-files-found: error
+      - run: python tests/phase2_news_evaluation.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: news-retrieval-report
+          path: GenAI/news-retrieval-report.json
           if-no-files-found: error

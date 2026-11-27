@@ -1,0 +1,236 @@
+{
+  "description": "Hand-authored short paraphrases of linked public institutional news releases; dates are release/event dates. Small curated English corpus, not a representative live-news benchmark. Relevance labels authored for this smoke evaluation; no independent annotators. Fixed clock for reproducibility.",
+  "as_of": "2026-10-08T00:00:00+00:00",
+  "articles": [
+    {
+      "id": "artemis-launch",
+      "date": "2026-04-01",
+      "title": "Artemis II crew launches aboard Orion",
+      "content": "NASA sent four astronauts toward the Moon on the Space Launch System for a crewed lunar flyby.",
+      "url": "https://www.nasa.gov/news-release/liftoff-nasa-launches-astronauts-on-historic-artemis-moon-mission/"
+    },
+    {
+      "id": "artemis-depart",
+      "date": "2026-04-02",
+      "title": "Orion departs Earth orbit for lunar journey",
+      "content": "A translunar injection engine burn put Artemis II on its outbound trajectory toward the Moon.",
+      "url": "https://www.nasa.gov/news-release/nasas-artemis-ii-mission-leaves-earth-orbit-for-flight-around-moon/"
+    },
+    {
+      "id": "artemis-pilot",
+      "date": "2026-04-04",
+      "title": "Artemis II astronauts demonstrate manual piloting",
+      "content": "The Orion crew practiced manual spacecraft control and prepared lunar flyby observations.",
+      "url": "https://www.nasa.gov/blogs/missions/2026/04/04/artemis-ii-flight-day-4-crew-completes-manual-piloting-demonstration/"
+    },
+    {
+      "id": "artemis-flyby",
+      "date": "2026-04-06",
+      "title": "Artemis II finishes lunar flyby",
+      "content": "The astronauts completed seven hours of lunar observations, photographing the far side.",
+      "url": "https://www.nasa.gov/blogs/missions/2026/04/06/artemis-ii-flight-day-6-crew-wraps-historic-lunar-flyby/"
+    },
+    {
+      "id": "artemis-photos",
+      "date": "2026-04-07",
+      "title": "Crew sends lunar flyby photographs to Earth",
+      "content": "The Artemis II photographs show the Moon, Earth and a solar eclipse seen from Orion.",
+      "url": "https://www.nasa.gov/news-release/nasas-artemis-ii-crew-beams-official-moon-flyby-photos-to-earth/"
+    },
+    {
+      "id": "artemis-data",
+      "date": "2026-10-07",
+      "title": "NASA publishes Artemis II lunar science data",
+      "content": "The agency published lunar science reports, imagery and a data user guide for the crewed flyby.",
+      "url": "https://www.nasa.gov/blogs/artemis/2026/10/07/nasa-releases-artemis-ii-lunar-science-data-images/"
+    },
+    {
+      "id": "artemis-home",
+      "date": "2026-04-11",
+      "title": "Artemis II crew returns to Houston",
+      "content": "Four astronauts were welcomed at Johnson Space Center after their ten-day journey around the Moon.",
+      "url": "https://www.nasa.gov/blogs/missions/2026/04/11/artemis-ii-astronauts-back-in-houston-reunite-with-families/"
+    },
+    {
+      "id": "dart-impact",
+      "date": "2022-09-26",
+      "title": "DART spacecraft collides with Dimorphos",
+      "content": "NASA deliberately struck the moonlet of Didymos to test a planetary defense technique.",
+      "url": "https://www.nasa.gov/news-release/nasas-dart-mission-hits-asteroid-in-first-ever-planetary-defense-test/"
+    },
+    {
+      "id": "dart-result",
+      "date": "2022-10-11",
+      "title": "DART collision changes asteroid orbit",
+      "content": "NASA confirmed that the impact altered Dimorphos's motion, demonstrating asteroid deflection.",
+      "url": "https://www.nasa.gov/news-release/nasa-confirms-dart-mission-impact-changed-asteroids-motion-in-space/"
+    },
+    {
+      "id": "webb",
+      "date": "2022-07-12",
+      "title": "Webb observatory releases first science images",
+      "content": "The James Webb Space Telescope began scientific operations with infrared images and spectra of the cosmos.",
+      "url": "https://science.nasa.gov/missions/webb/nasa-reveals-webb-telescopes-first-images-of-unseen-universe/"
+    },
+    {
+      "id": "euclid",
+      "date": "2023-11-07",
+      "title": "Euclid reveals first color views of the universe",
+      "content": "ESA's space telescope released its first full-color cosmic photographs, including galaxies in the Perseus cluster.",
+      "url": "https://www.esa.int/Science_Exploration/Space_Science/Euclid/Euclid_s_first_images_the_dazzling_edge_of_darkness"
+    },
+    {
+      "id": "malaria-rec",
+      "date": "2023-10-02",
+      "title": "WHO recommends R21 malaria vaccine",
+      "content": "R21/Matrix-M received a recommendation for preventing malaria in children.",
+      "url": "https://www.who.int/news/item/02-10-2023-who-recommends-r21-matrix-m-vaccine-for-malaria-prevention-in-updated-advice-on-immunization"
+    },
+    {
+      "id": "malaria-qual",
+      "date": "2023-12-21",
+      "title": "WHO prequalifies second malaria vaccine",
+      "content": "R21 became the second prequalified vaccine against malaria, following RTS,S.",
+      "url": "https://www.who.int/news/item/21-12-2023-who-prequalifies-a-second-malaria-vaccine-a-significant-milestone-in-prevention-of-the-disease"
+    },
+    {
+      "id": "mpox-emergency",
+      "date": "2024-08-14",
+      "title": "WHO declares mpox emergency",
+      "content": "The WHO Director-General classified the mpox outbreak as an international public health emergency.",
+      "url": "https://www.who.int/news/item/14-08-2024-who-director-general-declares-mpox-outbreak-a-public-health-emergency-of-international-concern"
+    },
+    {
+      "id": "mpox-vaccine",
+      "date": "2024-09-13",
+      "title": "WHO prequalifies first mpox vaccine",
+      "content": "WHO prequalified MVA-BN after evaluating the vaccine for use against mpox.",
+      "url": "https://www.who.int/news/item/13-09-2024-who-prequalifies-the-First-vaccine-against-mpox"
+    },
+    {
+      "id": "ai-law",
+      "date": "2024-08-01",
+      "title": "European AI Act comes into force",
+      "content": "The European Union adopted a legal framework governing artificial intelligence systems, with phased application.",
+      "url": "https://ec.europa.eu/commission/presscorner/detail/en/ip_24_4123"
+    },
+    {
+      "id": "ai-gpai",
+      "date": "2025-08-02",
+      "title": "EU general-purpose AI model rules apply",
+      "content": "Providers of general-purpose AI models face obligations under the AI Act as the new rules take effect.",
+      "url": "https://digital-strategy.ec.europa.eu/en/news/eu-rules-general-purpose-ai-models-start-apply-bringing-more-transparency-safety-and-accountability"
+    }
+  ],
+  "queries": [
+    {
+      "id": "q1",
+      "query": "Artemis II launch rocket",
+      "relevant": [
+        "artemis-launch"
+      ]
+    },
+    {
+      "id": "q2",
+      "query": "How did Orion leave Earth's orbit?",
+      "relevant": [
+        "artemis-depart"
+      ]
+    },
+    {
+      "id": "q3",
+      "query": "lunar far side photographs Artemis II",
+      "relevant": [
+        "artemis-flyby",
+        "artemis-photos",
+        "artemis-data"
+      ]
+    },
+    {
+      "id": "q4",
+      "query": "latest published Artemis II lunar science data",
+      "relevant": [
+        "artemis-data"
+      ]
+    },
+    {
+      "id": "q5",
+      "query": "NASA crew comes home to Houston",
+      "relevant": [
+        "artemis-home"
+      ]
+    },
+    {
+      "id": "q6",
+      "query": "spacecraft changes asteroid trajectory planetary defense",
+      "relevant": [
+        "dart-impact",
+        "dart-result"
+      ]
+    },
+    {
+      "id": "q7",
+      "query": "Dimorphos orbit after DART impact",
+      "relevant": [
+        "dart-result",
+        "dart-impact"
+      ]
+    },
+    {
+      "id": "q8",
+      "query": "first infrared pictures from James Webb",
+      "relevant": [
+        "webb"
+      ]
+    },
+    {
+      "id": "q9",
+      "query": "Euclid Perseus galaxies",
+      "relevant": [
+        "euclid"
+      ]
+    },
+    {
+      "id": "q10",
+      "query": "R21 Matrix-M malaria vaccine for children",
+      "relevant": [
+        "malaria-rec",
+        "malaria-qual"
+      ]
+    },
+    {
+      "id": "q11",
+      "query": "WHO prequalified MVA-BN vaccine",
+      "relevant": [
+        "mpox-vaccine"
+      ]
+    },
+    {
+      "id": "q12",
+      "query": "international health emergency mpox outbreak",
+      "relevant": [
+        "mpox-emergency"
+      ]
+    },
+    {
+      "id": "q13",
+      "query": "European law regulating artificial intelligence",
+      "relevant": [
+        "ai-law",
+        "ai-gpai"
+      ]
+    },
+    {
+      "id": "q14",
+      "query": "obligations for general-purpose AI model providers",
+      "relevant": [
+        "ai-gpai"
+      ]
+    },
+    {
+      "id": "q15",
+      "query": "Antarctica penguin population census",
+      "relevant": []
+    }
+  ]
+}

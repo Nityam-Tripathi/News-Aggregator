@@ -4,6 +4,7 @@ import subprocess
 import sys
 from sqlalchemy import text
 from fastapi.testclient import TestClient
+from unittest.mock import patch
 from app.database import engine
 from app.deployment import expected_identity, verify_database_identity, ENVIRONMENT
 from app.main import app
@@ -24,6 +25,9 @@ def check(expected_status):
         verify_database_identity(conn,expected_identity())
     response=TestClient(app).get("/ready")
     assert response.status_code==expected_status, response.text
+    if expected_status == 200:
+        with TestClient(app) as client:
+            assert client.get("/ready").json()["schema_revision"] == "0003_full_text"
     print("Readiness returned",expected_status)
 
 def reject():
@@ -34,7 +38,14 @@ def reject():
     with engine.connect() as conn:
         assert conn.execute(text("SELECT to_regclass('public.alembic_version')")).scalar_one() is None
         assert conn.execute(text("SELECT to_regclass('public.articles')")).scalar_one() is None
-    print("Wrong marker rejected before schema changes")
+    with patch.dict(os.environ, {"PHASE2_DATABASE_ID":env["PHASE2_DATABASE_ID"]}):
+        assert TestClient(app).get("/ready").status_code == 503
+        try:
+            with TestClient(app):
+                raise AssertionError("Startup unexpectedly succeeded")
+        except RuntimeError as exc:
+            assert "Phase 2 database identity or schema verification failed" in str(exc)
+    print("Wrong marker rejected before schema changes; runtime readiness and startup blocked")
 
 if __name__=="__main__":
     {"bootstrap":bootstrap,"reject":reject,"not-ready":lambda:check(503),"ready":lambda:check(200)}[sys.argv[1]]()

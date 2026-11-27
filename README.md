@@ -1,5 +1,7 @@
 # 🧠 InsightStream
 
+> **Phase 2 branch:** follow the [isolated staging runbook](docs/PHASE2_STAGING.md) for setup, database identity, migrations and deployment. The historical instructions below describe the earlier deployment and must not be used to initialize or deploy Phase 2.
+
 An AI-powered news aggregation and question-answering system built on a full **Retrieval-Augmented Generation (RAG)** pipeline. Ask any question about current events and get grounded, cited answers backed by real-time news articles.
 
 **Live Demo → [InsightStream](https://insightstream-three.vercel.app/)**
@@ -16,7 +18,7 @@ You type a question like *"What is happening in AI this week?"* and the system:
 4. Sends retrieved context to an LLM to generate a grounded answer
 5. Returns the answer with clickable sources, images, and timestamps
 
-No hallucination. No generic responses. Every answer is backed by real, recent news.
+Answers are generated from retrieved excerpts. Citation and evidence screening reduces unsupported-answer risk, but cannot guarantee factual correctness or freshness.
 
 ---
 

@@ -36,3 +36,18 @@ def generate_embedding(text: str):
         text, model="sentence-transformers/all-MiniLM-L6-v2"
     )
     return validate_embedding(result)
+
+def generate_embeddings(texts):
+    """One bounded local inference batch; preserve input order."""
+    if not texts:
+        return []
+    if len(texts) > 8 or any(not isinstance(t, str) or not t.strip() for t in texts):
+        raise ValueError("Expected 1–8 nonblank texts")
+    if os.getenv("EMBEDDING_PROVIDER", "hf") != "local":
+        # The hosted provider does not guarantee batch feature extraction.
+        return [generate_embedding(t) for t in texts]
+    with _model_lock:
+        vectors = list(local_model().embed(texts, batch_size=len(texts)))
+    if len(vectors) != len(texts):
+        raise ValueError("Unexpected embedding count")
+    return [validate_embedding(v) for v in vectors]

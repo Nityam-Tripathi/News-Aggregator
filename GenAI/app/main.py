@@ -2,12 +2,15 @@ from fastapi import FastAPI, HTTPException, Query, Header, Request, Depends
 from secrets import compare_digest
 import logging
 from .database import engine, SessionLocal
-from .url_identity import url_key
-from sqlalchemy.dialects.postgresql import insert
+from .ingestion import ingest_articles
+from .answer_cache import answer_cache, cache_key
+from fastapi.responses import StreamingResponse
+import json
+from contextlib import aclosing
 from .models import Base, NewsArticle
 from .news_fetcher import fetch_news, fetch_news_query
 from .embeddings import generate_embedding
-from .rag_pipeline import generate_answer
+from .rag_pipeline import generate_answer, stream_answer, model_name, PROMPT_VERSION
 from .hybrid import search_articles
 from .scheduler import start_scheduler, stop_scheduler 
 
@@ -81,71 +84,10 @@ def ingest(x_admin_key: str = Header(default="")):
         raise HTTPException(status_code=403, detail='Forbidden')
     db = SessionLocal()
     try:
-        articles = fetch_news()
-        fetched_count = len(articles)
-        inserted_count = 0
-        skipped_count = 0
-        failed_count = 0
-
-        for article in articles:
-            title = article.get("title")
-            content = article.get("description") or ""
-            published = article.get("publishedAt")
-
-            try:
-                published_time = datetime.fromisoformat(
-                    published.replace("Z", "+00:00")
-                ) if published else None
-            except:
-                published_time = None
-
-            if title and content:
-                key = url_key(article.get("url"))
-                exists = db.query(NewsArticle).filter(NewsArticle.url_key == key).first() if key else db.query(NewsArticle).filter(NewsArticle.title == title).first()
-
-                if exists:
-                    skipped_count += 1
-                    continue
-
-                combined_text = f"{title}. {content}"
-
-                # 🔥 SAFE EMBEDDING
-                try:
-                    embedding = generate_embedding(combined_text)
-                except Exception:
-                    logger.exception('Article embedding failed')
-                    failed_count += 1
-                    continue
-
-                news = insert(NewsArticle).values(url_key=key,
-                    title=title,
-                    content=content,
-                    url=article.get("url"),
-                    image_url=article.get("urlToImage"),
-                    published_at=published_time,
-                    embedding=embedding
-                )
-
-                result = db.execute(news.on_conflict_do_nothing(index_elements=["url_key"]))
-                inserted_count += result.rowcount
-                skipped_count += 1 - result.rowcount
-            else:
-                skipped_count += 1
-
-        db.commit()
-        print(
-            "Manual ingestion complete: "
-            f"fetched={fetched_count}, inserted={inserted_count}, "
-            f"skipped={skipped_count}, embedding_failures={failed_count}"
-        )
-        return {
-            "message": "News ingestion complete",
-            "fetched": fetched_count,
-            "inserted": inserted_count,
-            "skipped": skipped_count,
-            "embedding_failures": failed_count
-        }
-
+        return {"message": "News ingestion complete", **ingest_articles(db, fetch_news())}
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
 
@@ -174,97 +116,80 @@ def limit_search(request: Request):
         _rate_buckets[key] = bucket
         _global_requests.append(now)
 
-@app.get("/ask", dependencies=[Depends(limit_search)])
-def ask(query: str = Query(..., min_length=1, max_length=500)):
+NO_RESULTS = "No sufficiently relevant news articles found."
+
+def prepare_answer(query):
     query = query.strip()
     if not query:
-        raise HTTPException(status_code=422, detail='Query must not be blank')
+        raise HTTPException(status_code=422, detail="Query must not be blank")
     db = SessionLocal()
-
     try:
-        fresh_articles = fetch_news_query(query) if os.getenv("SEARCH_FETCH_FRESH", "false").lower() == "true" else []
-
-        for article in fresh_articles:
-            title = article.get("title")
-            content = article.get("description") or ""
-
-            if not title or not content:
-                continue
-
-            key = url_key(article.get("url"))
-            exists = db.query(NewsArticle).filter(NewsArticle.url_key == key).first() if key else db.query(NewsArticle).filter(NewsArticle.title == title).first()
-
-            if exists:
-                continue
-
-            combined = f"{title}. {content}"
-
-            try:
-                embedding = generate_embedding(combined)
-            except Exception:
-                logger.exception('Article embedding failed')
-                continue
-
-            published = article.get("publishedAt")
-
-            try:
-                published_time = datetime.fromisoformat(
-                    published.replace("Z", "+00:00")
-                ) if published else None
-            except:
-                published_time = None
-
-            news = insert(NewsArticle).values(url_key=key,
-                title=title,
-                content=content,
-                url=article.get("url"),
-                image_url=article.get("urlToImage"),
-                published_at=published_time,
-                embedding=embedding
-            )
-
-            db.execute(news.on_conflict_do_nothing(index_elements=["url_key"]))
-
-        db.commit()
-
-        # 🔍 Semantic Search using pgvector cosine distance
+        if os.getenv("SEARCH_FETCH_FRESH", "false").lower() == "true":
+            ingest_articles(db, fetch_news_query(query))
         try:
-            query_embedding = generate_embedding(query)
+            embedding = generate_embedding(query)
         except Exception:
-            logger.exception('Query embedding failed')
-            raise HTTPException(status_code=503, detail='Search temporarily unavailable')
-
-        results = search_articles(db, query, query_embedding)
-        if not results:
-            return {'query': query, 'answer': 'No sufficiently relevant news articles found.', 'sources': []}
-
-        context = "\n\n".join([
-            f"{a.title}. {a.content}" for a in results
-        ])
-
-        try:
-            answer = generate_answer(query, context)
-        except Exception:
-            logger.exception('Answer generation failed')
-            raise HTTPException(status_code=503, detail='Answer generation temporarily unavailable')
-
-        return {
-            "query": query,
-            "answer": answer,
-            "sources": [
-                {
-                    "title": a.title,
-                    "url": a.url,
-                    "image": a.image_url,
-                    "published_at": a.published_at.isoformat() if a.published_at else None
-                }
-                for a in results
-            ]
-        }
-
+            logger.warning("Query embedding failed")
+            raise HTTPException(status_code=503, detail="Search temporarily unavailable")
+        results = search_articles(db, query, embedding)
+        context = "\n\n".join(f"{a.title}. {a.content}" for a in results)
+        sources = [{"title":a.title,"url":a.url,"image":a.image_url,
+            "published_at":a.published_at.isoformat() if a.published_at else None} for a in results]
+        return query, context, sources
     finally:
         db.close()
 
+@app.get("/ask", dependencies=[Depends(limit_search)])
+def ask(query: str = Query(..., min_length=1, max_length=500)):
+    query, context, sources = prepare_answer(query)
+    if not sources:
+        return {"query":query,"answer":NO_RESULTS,"sources":[]}
+    key = cache_key(query, context, sources, model_name(), PROMPT_VERSION)
+    answer = answer_cache.get(key)
+    if answer is None:
+        try:
+            answer = generate_answer(query, context)
+        except Exception:
+            logger.warning("Answer generation failed")
+            raise HTTPException(status_code=503, detail="Answer generation temporarily unavailable")
+        answer_cache.put(key, answer)
+    return {"query":query,"answer":answer,"sources":sources}
+
+def sse(event, data):
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+async def answer_events(query, context, sources):
+    yield sse("sources", sources)
+    if not sources:
+        yield sse("delta", {"text":NO_RESULTS})
+        yield sse("done", {})
+        return
+    key = cache_key(query, context, sources, model_name(), PROMPT_VERSION)
+    cached = answer_cache.get(key)
+    if cached is not None:
+        yield sse("delta", {"text":cached})
+        yield sse("done", {})
+        return
+    parts = []
+    try:
+        async with aclosing(stream_answer(query, context)) as stream:
+            async for delta in stream:
+                parts.append(delta)
+                yield sse("delta", {"text":delta})
+        answer = "".join(parts)
+        if not answer.strip():
+            raise ValueError("Empty answer stream")
+        answer_cache.put(key, answer)
+        yield sse("done", {})
+    except Exception:
+        logger.warning("Answer streaming failed")
+        yield sse("error", {"message":"Answer generation interrupted. Please retry."})
+
+@app.get("/ask/stream", dependencies=[Depends(limit_search)])
+def ask_stream(query: str = Query(..., min_length=1, max_length=500)):
+    query, context, sources = prepare_answer(query)
+    return StreamingResponse(answer_events(query, context, sources), media_type="text/event-stream",
+        headers={"Cache-Control":"no-cache, no-transform","X-Accel-Buffering":"no"})
 
 @app.get("/freshness")
 def freshness():

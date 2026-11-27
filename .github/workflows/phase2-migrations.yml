@@ -19,6 +19,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:test@localhost:5432/phase2_test
       ALLOW_PHASE2_MIGRATIONS: "yes"
+      PYTHONPATH: "."
     defaults:
       run:
         working-directory: GenAI
@@ -28,8 +29,19 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install -r requirements.txt
+      - run: alembic upgrade 0001_baseline
+      - run: python tests/phase2_migration_check.py seed
       - run: alembic upgrade head
+      - run: python tests/phase2_migration_check.py verify
       - run: alembic current
       - run: alembic downgrade 0001_baseline
+      - run: python tests/phase2_migration_check.py verify-baseline
       - run: alembic upgrade head
+      - run: python tests/phase2_migration_check.py verify
       - run: python -m unittest discover -s tests -v
+      - run: python tests/phase2_hnsw_benchmark.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hnsw-report
+          path: GenAI/hnsw-report.json
+          if-no-files-found: error
